@@ -1,0 +1,17 @@
+:root {
+  font-family: 'Noto Sans', 'Segoe UI', sans-serif;
+  color: #1e1e1e;
+  background-color: #f7f7f7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#app {
+  min-height: 100vh;
+}
