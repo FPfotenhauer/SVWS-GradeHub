@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
+import type { LeistungsFeld } from '@/types/changes'
 import type { EnmLeistungsdaten, EnmSchueler } from '@/types/enm'
 
 const route = useRoute()
@@ -96,29 +97,125 @@ const NOTES_AUTO_ADVANCE = new Set<string>([
 
 // ── Shadow-State (letzte committete Werte, für Escape-Revert) ──────────────
 
-const editValues = reactive(new Map<number, string>())
-const invalidIds = reactive(new Set<number>())
+const editValues = reactive(new Map<string, string>())
+const invalidIds = reactive(new Set<string>())
 
 // ── Input-Refs & Navigation ────────────────────────────────────────────────
 
 const noteInputs = ref<(HTMLInputElement | null)[]>([])
+const quartalInputs = ref<(HTMLInputElement | null)[]>([])
+const fehlstundenFachInputs = ref<(HTMLInputElement | null)[]>([])
+const fehlstundenUnentschuldigtFachInputs = ref<(HTMLInputElement | null)[]>([])
+const bemerkungInputs = ref<(HTMLInputElement | null)[]>([])
 const focusedRow = ref<number>(-1)
+
+type EditField =
+  | 'note'
+  | 'noteQuartal'
+  | 'fehlstundenFach'
+  | 'fehlstundenUnentschuldigtFach'
+  | 'fachbezogeneBemerkungen'
+type ColumnKey = 'nr' | 'name' | 'klasse' | 'fsf' | 'fsu' | 'quartal' | 'note'
+
+const columnWidths = reactive<Record<ColumnKey, number>>({
+  nr: 56,
+  name: 320,
+  klasse: 96,
+  fsf: 84,
+  fsu: 84,
+  quartal: 110,
+  note: 110,
+})
+
+const minColumnWidths: Record<ColumnKey, number> = {
+  nr: 44,
+  name: 180,
+  klasse: 72,
+  fsf: 64,
+  fsu: 64,
+  quartal: 88,
+  note: 88,
+}
+
+const resizing = ref<{
+  key: ColumnKey
+  startX: number
+  startWidth: number
+} | null>(null)
+
+function onResizeMove(event: PointerEvent): void {
+  if (!resizing.value) return
+  const delta = event.clientX - resizing.value.startX
+  const nextWidth = Math.max(minColumnWidths[resizing.value.key], resizing.value.startWidth + delta)
+  columnWidths[resizing.value.key] = nextWidth
+}
+
+function stopResize(): void {
+  if (!resizing.value) return
+  resizing.value = null
+  window.removeEventListener('pointermove', onResizeMove)
+  window.removeEventListener('pointerup', stopResize)
+}
+
+function startResize(key: ColumnKey, event: PointerEvent): void {
+  event.preventDefault()
+  resizing.value = {
+    key,
+    startX: event.clientX,
+    startWidth: columnWidths[key],
+  }
+  window.addEventListener('pointermove', onResizeMove)
+  window.addEventListener('pointerup', stopResize)
+}
+
+onBeforeUnmount(() => {
+  stopResize()
+})
 
 function initEditValues(): void {
   editValues.clear()
   invalidIds.clear()
   for (const s of schuelerListe.value) {
-    const change = changeStore.getChange(s.id, lerngruppenId.value)
+    const noteChange = changeStore.getChange(s.id, lerngruppenId.value, 'note')
+    const quartalChange = changeStore.getChange(s.id, lerngruppenId.value, 'noteQuartal')
+    const fsfChange = changeStore.getChange(s.id, lerngruppenId.value, 'fehlstundenFach')
+    const fsuChange = changeStore.getChange(s.id, lerngruppenId.value, 'fehlstundenUnentschuldigtFach')
+    const bemerkungChange = changeStore.getChange(s.id, lerngruppenId.value, 'fachbezogeneBemerkungen')
     const ld = getLeistungsdaten(s)
-    editValues.set(s.id, change?.neuerWert ?? ld?.note ?? '')
+    editValues.set(editKey(s.id, 'note'), noteChange?.neuerWert ?? ld?.note ?? '')
+    editValues.set(editKey(s.id, 'noteQuartal'), quartalChange?.neuerWert ?? ld?.noteQuartal ?? '')
+    editValues.set(
+      editKey(s.id, 'fehlstundenFach'),
+      fsfChange?.neuerWert ?? (ld ? String(ld.fehlstundenFach) : ''),
+    )
+    editValues.set(
+      editKey(s.id, 'fehlstundenUnentschuldigtFach'),
+      fsuChange?.neuerWert ?? (ld ? String(ld.fehlstundenUnentschuldigtFach) : ''),
+    )
+    editValues.set(
+      editKey(s.id, 'fachbezogeneBemerkungen'),
+      bemerkungChange?.neuerWert ?? (ld?.fachbezogeneBemerkungen ?? ''),
+    )
   }
 }
 
 // Beim Wechsel der Lerngruppe oder beim ersten Laden initialisieren
 watch(() => lerngruppenId.value, () => {
   noteInputs.value = []
+  quartalInputs.value = []
+  fehlstundenFachInputs.value = []
+  fehlstundenUnentschuldigtFachInputs.value = []
+  bemerkungInputs.value = []
   initEditValues()
 }, { immediate: true })
+
+function editKey(schuelerId: number, feld: EditField): string {
+  return `${schuelerId}:${feld}`
+}
+
+function invalidKey(schuelerId: number, feld: EditField): string {
+  return editKey(schuelerId, feld)
+}
 
 // Uncontrolled inputs: Initialwert wird imperativ per Ref-Callback gesetzt.
 // Kein :value-Binding – verhindert Überschreiben des DOM-Werts beim Re-Render.
@@ -127,15 +224,89 @@ function setNoteInputRef(el: unknown, index: number): void {
     noteInputs.value[index] = el
     const schueler = schuelerListe.value[index]
     if (schueler) {
-      el.value = editValues.get(schueler.id) ?? ''
+      el.value = editValues.get(editKey(schueler.id, 'note')) ?? ''
     }
   } else {
     noteInputs.value[index] = null
   }
 }
 
+function setQuartalInputRef(el: unknown, index: number): void {
+  if (el instanceof HTMLInputElement) {
+    quartalInputs.value[index] = el
+    const schueler = schuelerListe.value[index]
+    if (schueler) {
+      el.value = editValues.get(editKey(schueler.id, 'noteQuartal')) ?? ''
+    }
+  } else {
+    quartalInputs.value[index] = null
+  }
+}
+
+function setFehlstundenFachInputRef(el: unknown, index: number): void {
+  if (el instanceof HTMLInputElement) {
+    fehlstundenFachInputs.value[index] = el
+    const schueler = schuelerListe.value[index]
+    if (schueler) {
+      el.value = editValues.get(editKey(schueler.id, 'fehlstundenFach')) ?? ''
+    }
+  } else {
+    fehlstundenFachInputs.value[index] = null
+  }
+}
+
+function setFehlstundenUnentschuldigtFachInputRef(el: unknown, index: number): void {
+  if (el instanceof HTMLInputElement) {
+    fehlstundenUnentschuldigtFachInputs.value[index] = el
+    const schueler = schuelerListe.value[index]
+    if (schueler) {
+      el.value = editValues.get(editKey(schueler.id, 'fehlstundenUnentschuldigtFach')) ?? ''
+    }
+  } else {
+    fehlstundenUnentschuldigtFachInputs.value[index] = null
+  }
+}
+
+function setBemerkungInputRef(el: unknown, index: number): void {
+  if (el instanceof HTMLInputElement) {
+    bemerkungInputs.value[index] = el
+    const schueler = schuelerListe.value[index]
+    if (schueler) {
+      el.value = editValues.get(editKey(schueler.id, 'fachbezogeneBemerkungen')) ?? ''
+    }
+  } else {
+    bemerkungInputs.value[index] = null
+  }
+}
+
 function focusNoteAt(index: number): void {
   const input = noteInputs.value[index]
+  if (input) {
+    input.focus()
+    input.select()
+  }
+}
+
+function onRowClick(event: MouseEvent, index: number): void {
+  const target = event.target as HTMLElement | null
+  if (target?.closest('input, button')) {
+    return
+  }
+  focusNoteAt(index)
+}
+
+function focusFieldAt(index: number, feld: EditField): void {
+  const input = (
+    feld === 'note'
+      ? noteInputs.value[index]
+      : feld === 'noteQuartal'
+        ? quartalInputs.value[index]
+        : feld === 'fehlstundenFach'
+          ? fehlstundenFachInputs.value[index]
+          : feld === 'fehlstundenUnentschuldigtFach'
+            ? fehlstundenUnentschuldigtFachInputs.value[index]
+            : bemerkungInputs.value[index]
+  )
   if (input) {
     input.focus()
     input.select()
@@ -148,22 +319,61 @@ function originalNote(schueler: EnmSchueler): string {
   return getLeistungsdaten(schueler)?.note ?? ''
 }
 
-function hasChange(schueler: EnmSchueler): boolean {
-  const change = changeStore.getChange(schueler.id, lerngruppenId.value)
+function originalFieldValue(schueler: EnmSchueler, feld: EditField): string {
+  const ld = getLeistungsdaten(schueler)
+  if (!ld) return ''
+  if (feld === 'note') return ld.note ?? ''
+  if (feld === 'noteQuartal') return ld.noteQuartal ?? ''
+  if (feld === 'fehlstundenFach') return String(ld.fehlstundenFach)
+  if (feld === 'fehlstundenUnentschuldigtFach') return String(ld.fehlstundenUnentschuldigtFach)
+  return ld.fachbezogeneBemerkungen ?? ''
+}
+
+function normalizeFieldValue(feld: EditField, rawValue: string): string {
+  if (feld === 'note' || feld === 'noteQuartal') {
+    return rawValue.trim().toUpperCase()
+  }
+  if (feld === 'fachbezogeneBemerkungen') {
+    return rawValue
+  }
+  const digitsOnly = rawValue.replace(/\D/g, '')
+  return digitsOnly
+}
+
+function isValidFieldValue(feld: EditField, normalized: string): boolean {
+  if (normalized === '') return true
+  if (feld === 'note' || feld === 'noteQuartal') {
+    return VALID_NOTES.has(normalized)
+  }
+  if (feld === 'fachbezogeneBemerkungen') {
+    return true
+  }
+  return /^\d+$/.test(normalized)
+}
+
+function hasChange(schueler: EnmSchueler, feld: EditField = 'note'): boolean {
+  const change = changeStore.getChange(schueler.id, lerngruppenId.value, feld)
   if (!change) return false
-  const original = getLeistungsdaten(schueler)?.note ?? null
+  const original = originalFieldValue(schueler, feld) || null
   return change.neuerWert !== original
 }
 
-function commitNote(schueler: EnmSchueler, rawValue: string, index: number, advance: boolean): void {
-  const normalized = rawValue.trim().toUpperCase()
+function commitField(
+  schueler: EnmSchueler,
+  feld: EditField,
+  rawValue: string,
+  index: number,
+  advance: boolean,
+): void {
+  const normalized = normalizeFieldValue(feld, rawValue)
+  const invalidId = invalidKey(schueler.id, feld)
 
-  if (normalized !== '' && !VALID_NOTES.has(normalized)) {
-    invalidIds.add(schueler.id)
+  if (!isValidFieldValue(feld, normalized)) {
+    invalidIds.add(invalidId)
     return
   }
 
-  invalidIds.delete(schueler.id)
+  invalidIds.delete(invalidId)
 
   const ld = getLeistungsdaten(schueler)
   const neuerWert = normalized === '' ? null : normalized
@@ -171,20 +381,40 @@ function commitNote(schueler: EnmSchueler, rawValue: string, index: number, adva
   changeStore.setChange({
     schuelerId:        schueler.id,
     lerngruppenId:     lerngruppenId.value,
-    feld:              'note',
-    alterWert:         ld?.note ?? null,
+    feld:              feld as LeistungsFeld,
+    alterWert: (
+      feld === 'note'
+        ? (ld?.note ?? null)
+        : feld === 'noteQuartal'
+          ? (ld?.noteQuartal ?? null)
+          : feld === 'fehlstundenFach'
+            ? (ld ? String(ld.fehlstundenFach) : null)
+            : feld === 'fehlstundenUnentschuldigtFach'
+              ? (ld ? String(ld.fehlstundenUnentschuldigtFach) : null)
+              : (ld?.fachbezogeneBemerkungen ?? null)
+    ),
     neuerWert,
     geaendertAm:       new Date().toISOString(),
     geaendertVon:      lehrerKuerzel.value,
-    enmBasisTimestamp: ld?.tsNote ?? '',
+    enmBasisTimestamp: (
+      feld === 'note'
+        ? (ld?.tsNote ?? '')
+        : feld === 'noteQuartal'
+          ? (ld?.tsNoteQuartal ?? '')
+          : feld === 'fehlstundenFach'
+            ? (ld?.tsFehlstundenFach ?? '')
+            : feld === 'fehlstundenUnentschuldigtFach'
+              ? (ld?.tsFehlstundenUnentschuldigtFach ?? '')
+              : (ld?.tsFachbezogeneBemerkungen ?? '')
+    ),
   })
 
-  editValues.set(schueler.id, neuerWert ?? '')
+  editValues.set(editKey(schueler.id, feld), neuerWert ?? '')
 
   if (advance) {
     nextTick(() => {
       if (index + 1 < schuelerListe.value.length) {
-        focusNoteAt(index + 1)
+        focusFieldAt(index + 1, feld)
       }
     })
   }
@@ -196,30 +426,70 @@ function onNoteInput(event: Event, schueler: EnmSchueler, index: number): void {
   const input = event.target as HTMLInputElement
   const upper = input.value.toUpperCase()
 
-  invalidIds.delete(schueler.id)
+  invalidIds.delete(invalidKey(schueler.id, 'note'))
 
   if (NOTES_AUTO_ADVANCE.has(upper)) {
     input.value = upper
-    commitNote(schueler, upper, index, true)
+    commitField(schueler, 'note', upper, index, true)
   }
 }
 
-function onNoteKeydown(event: KeyboardEvent, schueler: EnmSchueler, index: number): void {
+function onQuartalInput(event: Event, schueler: EnmSchueler, index: number): void {
+  const input = event.target as HTMLInputElement
+  const upper = input.value.toUpperCase()
+
+  invalidIds.delete(invalidKey(schueler.id, 'noteQuartal'))
+
+  if (NOTES_AUTO_ADVANCE.has(upper)) {
+    input.value = upper
+    commitField(schueler, 'noteQuartal', upper, index, true)
+  }
+}
+
+function onBemerkungInput(event: Event, schueler: EnmSchueler, index: number): void {
+  const input = event.target as HTMLInputElement
+  invalidIds.delete(invalidKey(schueler.id, 'fachbezogeneBemerkungen'))
+  commitField(schueler, 'fachbezogeneBemerkungen', input.value, index, false)
+}
+
+function onFehlstundenInput(
+  event: Event,
+  schueler: EnmSchueler,
+  index: number,
+  feld: 'fehlstundenFach' | 'fehlstundenUnentschuldigtFach',
+): void {
+  const input = event.target as HTMLInputElement
+  const digitsOnly = input.value.replace(/\D/g, '')
+
+  if (input.value !== digitsOnly) {
+    input.value = digitsOnly
+  }
+
+  invalidIds.delete(invalidKey(schueler.id, feld))
+  commitField(schueler, feld, digitsOnly, index, false)
+}
+
+function onFieldKeydown(
+  event: KeyboardEvent,
+  schueler: EnmSchueler,
+  index: number,
+  feld: EditField,
+): void {
   const input = event.target as HTMLInputElement
 
   if (event.key === 'Enter' || event.key === 'ArrowDown') {
     event.preventDefault()
-    commitNote(schueler, input.value, index, true)
+    commitField(schueler, feld, input.value, index, true)
   } else if (event.key === 'ArrowUp') {
     event.preventDefault()
-    commitNote(schueler, input.value, index, false)
-    nextTick(() => focusNoteAt(index - 1))
+    commitField(schueler, feld, input.value, index, false)
+    nextTick(() => focusFieldAt(index - 1, feld))
   } else if (event.key === 'Escape') {
     event.preventDefault()
     // Zurück auf letzten committeten Wert
-    const reverted = editValues.get(schueler.id) ?? ''
+    const reverted = editValues.get(editKey(schueler.id, feld)) ?? ''
     input.value = reverted
-    invalidIds.delete(schueler.id)
+    invalidIds.delete(invalidKey(schueler.id, feld))
   }
 }
 
@@ -230,19 +500,61 @@ function onNoteBlur(event: FocusEvent, schueler: EnmSchueler, index: number): vo
   if (input.value !== normalized) {
     input.value = normalized
   }
-  commitNote(schueler, normalized, index, false)
+  commitField(schueler, 'note', normalized, index, false)
+}
+
+function onQuartalBlur(event: FocusEvent, schueler: EnmSchueler, index: number): void {
+  const input = event.target as HTMLInputElement
+  const normalized = input.value.toUpperCase()
+  if (input.value !== normalized) {
+    input.value = normalized
+  }
+  commitField(schueler, 'noteQuartal', normalized, index, false)
+}
+
+function onFehlstundenBlur(
+  event: FocusEvent,
+  schueler: EnmSchueler,
+  index: number,
+  feld: 'fehlstundenFach' | 'fehlstundenUnentschuldigtFach',
+): void {
+  const input = event.target as HTMLInputElement
+  const digitsOnly = input.value.replace(/\D/g, '')
+  if (input.value !== digitsOnly) {
+    input.value = digitsOnly
+  }
+  commitField(schueler, feld, digitsOnly, index, false)
+}
+
+function onBemerkungBlur(event: FocusEvent, schueler: EnmSchueler, index: number): void {
+  const input = event.target as HTMLInputElement
+  commitField(schueler, 'fachbezogeneBemerkungen', input.value, index, false)
+}
+
+function hasAnyRowChange(schueler: EnmSchueler): boolean {
+  return (
+    hasChange(schueler, 'note')
+    || hasChange(schueler, 'noteQuartal')
+    || hasChange(schueler, 'fehlstundenFach')
+    || hasChange(schueler, 'fehlstundenUnentschuldigtFach')
+    || hasChange(schueler, 'fachbezogeneBemerkungen')
+  )
 }
 
 // ── Statistiken ────────────────────────────────────────────────────────────
 
 const aenderungsCount = computed(() =>
-  schuelerListe.value.filter((s) => hasChange(s)).length,
+  schuelerListe.value.filter((s) => hasAnyRowChange(s)).length,
 )
 
 // ── Navigation ─────────────────────────────────────────────────────────────
 
 function goBack(): void {
   router.push({ name: 'lerngruppen' })
+}
+
+function goSave(): void {
+  router.push({ name: 'export' })
 }
 </script>
 
@@ -264,6 +576,14 @@ function goBack(): void {
         <span v-if="aenderungsCount > 0" class="stat stat-geaendert">
           {{ aenderungsCount }} geändert
         </span>
+        <button
+          class="btn-save"
+          type="button"
+          :disabled="aenderungsCount === 0"
+          @click="goSave"
+        >
+          Speichern
+        </button>
       </div>
     </header>
 
@@ -276,12 +596,84 @@ function goBack(): void {
     <!-- ── Notentabelle ────────────────────────────────────────────────── -->
     <div v-else class="tabelle-wrapper">
       <table class="notentabelle">
+        <colgroup>
+          <col :style="{ width: `${columnWidths.nr}px` }" />
+          <col :style="{ width: `${columnWidths.name}px` }" />
+          <col :style="{ width: `${columnWidths.klasse}px` }" />
+          <col :style="{ width: `${columnWidths.fsf}px` }" />
+          <col :style="{ width: `${columnWidths.fsu}px` }" />
+          <col :style="{ width: `${columnWidths.quartal}px` }" />
+          <col :style="{ width: `${columnWidths.note}px` }" />
+          <col />
+        </colgroup>
         <thead>
           <tr>
-            <th class="col-nr">#</th>
-            <th class="col-name">Name</th>
-            <th class="col-klasse">Klasse</th>
-            <th class="col-note">Note</th>
+            <th class="col-nr is-resizable">
+              <span>#</span>
+              <button
+                class="col-resizer"
+                type="button"
+                aria-label="Spalte Nummer verbreitern oder verschmälern"
+                @pointerdown="startResize('nr', $event)"
+              />
+            </th>
+            <th class="col-name is-resizable">
+              <span>Name</span>
+              <button
+                class="col-resizer"
+                type="button"
+                aria-label="Spalte Name verbreitern oder verschmälern"
+                @pointerdown="startResize('name', $event)"
+              />
+            </th>
+            <th class="col-klasse is-resizable">
+              <span>Klasse</span>
+              <button
+                class="col-resizer"
+                type="button"
+                aria-label="Spalte Klasse verbreitern oder verschmälern"
+                @pointerdown="startResize('klasse', $event)"
+              />
+            </th>
+            <th class="col-fsf is-resizable">
+              <span>FSF</span>
+              <button
+                class="col-resizer"
+                type="button"
+                aria-label="Spalte FSF verbreitern oder verschmälern"
+                @pointerdown="startResize('fsf', $event)"
+              />
+            </th>
+            <th class="col-fsu is-resizable">
+              <span>FSU</span>
+              <button
+                class="col-resizer"
+                type="button"
+                aria-label="Spalte FSU verbreitern oder verschmälern"
+                @pointerdown="startResize('fsu', $event)"
+              />
+            </th>
+            <th class="col-quartal is-resizable">
+              <span>Quartal</span>
+              <button
+                class="col-resizer"
+                type="button"
+                aria-label="Spalte Quartal verbreitern oder verschmälern"
+                @pointerdown="startResize('quartal', $event)"
+              />
+            </th>
+            <th class="col-note is-resizable">
+              <span>Note</span>
+              <button
+                class="col-resizer"
+                type="button"
+                aria-label="Spalte Note verbreitern oder verschmälern"
+                @pointerdown="startResize('note', $event)"
+              />
+            </th>
+            <th class="col-bemerkung">
+              <span>Fachbezogene Bemerkung</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -289,10 +681,10 @@ function goBack(): void {
             v-for="(schueler, idx) in schuelerListe"
             :key="schueler.id"
             :class="{
-              'zeile-geaendert': hasChange(schueler),
+              'zeile-geaendert': hasAnyRowChange(schueler),
               'zeile-focus': focusedRow === idx,
             }"
-            @click="focusNoteAt(idx)"
+            @click="onRowClick($event, idx)"
           >
             <td class="col-nr">{{ idx + 1 }}</td>
             <td class="col-name">
@@ -301,12 +693,72 @@ function goBack(): void {
               >{{ schueler.vorname }}</span>
             </td>
             <td class="col-klasse">{{ klassenById.get(schueler.klasseID) ?? '' }}</td>
+            <td class="col-fsf">
+              <input
+                class="absence-input"
+                :class="{
+                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenFach')),
+                  'note-geaendert': hasChange(schueler, 'fehlstundenFach'),
+                }"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+                :placeholder="originalFieldValue(schueler, 'fehlstundenFach')"
+                :ref="(el) => setFehlstundenFachInputRef(el, idx)"
+                @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenFach')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenFach')"
+                @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenFach')"
+                @focus="focusedRow = idx"
+              />
+            </td>
+            <td class="col-fsu">
+              <input
+                class="absence-input"
+                :class="{
+                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenUnentschuldigtFach')),
+                  'note-geaendert': hasChange(schueler, 'fehlstundenUnentschuldigtFach'),
+                }"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+                :placeholder="originalFieldValue(schueler, 'fehlstundenUnentschuldigtFach')"
+                :ref="(el) => setFehlstundenUnentschuldigtFachInputRef(el, idx)"
+                @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                @focus="focusedRow = idx"
+              />
+            </td>
+            <td class="col-quartal">
+              <input
+                class="note-input"
+                :class="{
+                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'noteQuartal')),
+                  'note-geaendert': hasChange(schueler, 'noteQuartal'),
+                }"
+                type="text"
+                maxlength="2"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+                :placeholder="originalFieldValue(schueler, 'noteQuartal')"
+                :ref="(el) => setQuartalInputRef(el, idx)"
+                @input="onQuartalInput($event, schueler, idx)"
+                @keydown="onFieldKeydown($event, schueler, idx, 'noteQuartal')"
+                @blur="onQuartalBlur($event, schueler, idx)"
+                @focus="focusedRow = idx"
+              />
+            </td>
             <td class="col-note">
               <input
                 class="note-input"
                 :class="{
-                  'note-invalid':   invalidIds.has(schueler.id),
-                  'note-geaendert': hasChange(schueler),
+                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'note')),
+                  'note-geaendert': hasChange(schueler, 'note'),
                 }"
                 type="text"
                 maxlength="2"
@@ -316,8 +768,26 @@ function goBack(): void {
                 :placeholder="originalNote(schueler)"
                 :ref="(el) => setNoteInputRef(el, idx)"
                 @input="onNoteInput($event, schueler, idx)"
-                @keydown="onNoteKeydown($event, schueler, idx)"
+                @keydown="onFieldKeydown($event, schueler, idx, 'note')"
                 @blur="onNoteBlur($event, schueler, idx)"
+                @focus="focusedRow = idx"
+              />
+            </td>
+            <td class="col-bemerkung">
+              <input
+                class="bemerkung-input"
+                :class="{
+                  'note-geaendert': hasChange(schueler, 'fachbezogeneBemerkungen'),
+                }"
+                type="text"
+                autocomplete="off"
+                autocorrect="off"
+                spellcheck="false"
+                :placeholder="originalFieldValue(schueler, 'fachbezogeneBemerkungen')"
+                :ref="(el) => setBemerkungInputRef(el, idx)"
+                @input="onBemerkungInput($event, schueler, idx)"
+                @keydown="onFieldKeydown($event, schueler, idx, 'fachbezogeneBemerkungen')"
+                @blur="onBemerkungBlur($event, schueler, idx)"
                 @focus="focusedRow = idx"
               />
             </td>
@@ -374,6 +844,33 @@ function goBack(): void {
 }
 .btn-back:hover {
   background-color: var(--color-bg);
+}
+
+.btn-save {
+  background-color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-save:hover {
+  filter: brightness(0.95);
+}
+
+.btn-save:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
 }
 
 .noten-header-info {
@@ -442,12 +939,15 @@ function goBack(): void {
 
 .tabelle-wrapper {
   flex: 1;
-  overflow-x: auto;
+  overflow: auto;
   padding: 1.25rem 1.5rem;
 }
 
 .notentabelle {
   width: 100%;
+  min-width: max-content;
+  max-width: none;
+  table-layout: fixed;
   border-collapse: collapse;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -456,15 +956,63 @@ function goBack(): void {
 }
 
 .notentabelle thead th {
+  position: sticky;
+  top: 0;
+  z-index: 12;
   background-color: var(--color-bg);
   color: var(--color-text-muted);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0.55rem 0.75rem;
+  padding: 0.55rem 1rem 0.55rem 0.75rem;
   text-align: left;
   border-bottom: 2px solid var(--color-border);
+}
+
+.notentabelle th,
+.notentabelle td {
+  border-right: 1px solid color-mix(in srgb, var(--color-border) 70%, transparent);
+}
+
+.notentabelle th:last-child,
+.notentabelle td:last-child {
+  border-right: none;
+}
+
+.notentabelle th.is-resizable {
+  position: sticky;
+}
+
+.col-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  border: none;
+  margin: 0;
+  padding: 0;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 20;
+}
+
+.col-resizer::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  bottom: 20%;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background-color: color-mix(in srgb, var(--color-border) 80%, transparent);
+}
+
+.col-resizer:hover::before,
+.col-resizer:focus-visible::before {
+  width: 2px;
+  background-color: var(--color-primary);
 }
 
 .notentabelle tbody tr {
@@ -513,6 +1061,7 @@ function goBack(): void {
 
 .col-name {
   min-width: 10rem;
+  white-space: nowrap;
 }
 
 .name-nachname {
@@ -523,19 +1072,42 @@ function goBack(): void {
 }
 
 .col-klasse {
-  width: 5rem;
+  width: 1%;
+  white-space: nowrap;
+  text-align: left;
   color: var(--color-text-muted);
   font-size: 0.85rem;
 }
 
 .col-note {
-  width: 7rem;
+  width: 1%;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.col-quartal {
+  width: 1%;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.col-fsf,
+.col-fsu {
+  width: 1%;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.col-bemerkung {
+  min-width: 20rem;
+  width: auto;
+  text-align: left;
 }
 
 /* ── Note-Input ──────────────────────────────────────────────────────────── */
 
 .note-input {
-  width: 4.5rem;
+  width: 3.5rem;
   padding: 0.3rem 0.5rem;
   border: 1.5px solid var(--color-border);
   border-radius: 6px;
@@ -544,7 +1116,7 @@ function goBack(): void {
   font-size: 1rem;
   font-family: 'Noto Sans Mono', 'Courier New', monospace;
   font-weight: 700;
-  text-align: center;
+  text-align: left;
   letter-spacing: 0.05em;
   outline: none;
   transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
@@ -577,6 +1149,69 @@ function goBack(): void {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error-border) 18%, transparent);
 }
 
+.absence-input {
+  width: 3.5rem;
+  padding: 0.3rem 0.5rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
+}
+
+.absence-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.absence-input.note-geaendert {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-bg);
+  color: #166534;
+}
+
+:root[data-theme='dark'] .absence-input.note-geaendert {
+  color: #86efac;
+}
+
+.absence-input.note-invalid {
+  border-color: var(--color-error-border);
+  background-color: var(--color-error-bg);
+}
+
+.bemerkung-input {
+  width: 100%;
+  min-width: 18rem;
+  padding: 0.3rem 0.5rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 6px;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.95rem;
+  text-align: left;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s, background-color 0.12s;
+}
+
+.bemerkung-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.bemerkung-input.note-geaendert {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-bg);
+  color: #166534;
+}
+
+:root[data-theme='dark'] .bemerkung-input.note-geaendert {
+  color: #86efac;
+}
+
 /* ── Fallback ────────────────────────────────────────────────────────────── */
 
 .kein-inhalt {
@@ -593,6 +1228,9 @@ function goBack(): void {
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 
 .noteneingabe-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
   padding: 0.6rem 1.5rem;
   border-top: 1px solid var(--color-border);
   background-color: var(--color-surface);
