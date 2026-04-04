@@ -945,7 +945,7 @@ function goSave(): void {
 
 .notentabelle {
   width: 100%;
-  min-width: max-content;
+  min-width: 0;
   max-width: none;
   table-layout: fixed;
   border-collapse: collapse;
@@ -1099,7 +1099,7 @@ function goSave(): void {
 }
 
 .col-bemerkung {
-  min-width: 20rem;
+  min-width: 0;
   width: auto;
   text-align: left;
 }
@@ -1185,7 +1185,7 @@ function goSave(): void {
 
 .bemerkung-input {
   width: 100%;
-  min-width: 18rem;
+  min-width: 0;
   padding: 0.3rem 0.5rem;
   border: 1.5px solid var(--color-border);
   border-radius: 6px;
