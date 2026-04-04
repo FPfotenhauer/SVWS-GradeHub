@@ -1,12 +1,17 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 
+import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { EnmKlasse, EnmLerngruppe } from '@/types/enm'
 
+const router = useRouter()
 const enmStore = useENMStore()
+const changeStore = useChangeStore()
+const { changeCount } = storeToRefs(changeStore)
 
 function parseLehrerId(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -127,11 +132,11 @@ const ownLehrerAnzeige = computed<string>(() => {
   return `${lehrer.vorname} ${lehrer.nachname} (${lehrer.kuerzel})`
 })
 
-const lerngruppenCards = computed<Array<EnmLerngruppe>>(() => {
+const lerngruppenCards = computed(() => {
   return [...lerngruppen.value].sort((a, b) => a.bezeichnung.localeCompare(b.bezeichnung, 'de'))
 })
 
-const klassenleiterKlassen = computed<Array<EnmKlasse>>(() => {
+const klassenleiterKlassen = computed(() => {
   const id = ownLehrerId.value
   if (id === null) {
     return []
@@ -142,12 +147,30 @@ const klassenleiterKlassen = computed<Array<EnmKlasse>>(() => {
     .sort((a, b) => a.sortierung - b.sortierung)
 })
 
+function goSave(): void {
+  router.push({ name: 'export' })
+}
+
 // Naechster Schritt: Lerngruppen nach Klasse/Fach filterbar machen und Sortierung speichern.
 </script>
 
 <template>
   <main class="lerngruppen-view">
-    <h1>Lerngruppen</h1>
+    <div class="kopfzeile">
+      <h1>Lerngruppen</h1>
+      <div class="aenderungsbox">
+        <span class="aenderungs-label">Änderungen:</span>
+        <strong class="aenderungs-wert">{{ changeCount }}</strong>
+        <button
+          class="btn-save"
+          type="button"
+          :disabled="changeCount === 0"
+          @click="goSave"
+        >
+          Speichern
+        </button>
+      </div>
+    </div>
     <p v-if="ownLehrerAnzeige" class="lehrer-info">Lehrkraft: {{ ownLehrerAnzeige }}</p>
 
     <p v-if="!enmStore.isLoaded">Es sind noch keine ENM-Daten geladen.</p>
@@ -206,6 +229,65 @@ const klassenleiterKlassen = computed<Array<EnmKlasse>>(() => {
   max-width: 64rem;
   margin: 0 auto;
   padding: 1.5rem;
+}
+
+.kopfzeile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.kopfzeile h1 {
+  margin: 0;
+}
+
+.aenderungsbox {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  background: var(--color-surface);
+}
+
+.aenderungs-label {
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+}
+
+.aenderungs-wert {
+  min-width: 1.5rem;
+  text-align: right;
+}
+
+.btn-save {
+  background-color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-save:hover {
+  filter: brightness(0.95);
+}
+
+.btn-save:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
 }
 
 .bereich + .bereich {

@@ -1,6 +1,8 @@
 export type LeistungsFeld =
   | 'note'
   | 'noteQuartal'
+  | 'fehlstundenFach'
+  | 'fehlstundenUnentschuldigtFach'
   | 'fehlstundenGesamt'
   | 'fehlstundenUnentschuldigt'
   | 'fachbezogeneBemerkungen'
@@ -18,6 +20,6 @@ export interface LeistungsChange {
   enmBasisTimestamp: string
 }
 
-export type ChangeKey = `${number}:${number}`
+export type ChangeKey = `${number}:${number}:${LeistungsFeld}`
 
 // Naechster Schritt: Validierungslogik fuer erlaubte Feldwerte zentralisieren.
