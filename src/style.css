@@ -1,7 +1,36 @@
 :root {
   font-family: 'Noto Sans', 'Segoe UI', sans-serif;
-  color: #1e1e1e;
-  background-color: #f7f7f7;
+  --color-bg: #dcebf8;
+  --color-surface: #ffffff;
+  --color-text: #1e1e1e;
+  --color-text-muted: #4b5563;
+  --color-border: #d9e1ea;
+  --color-primary: #0c5a8f;
+  --color-success-bg: #e8f6ea;
+  --color-success-border: #b8debd;
+  --color-error-bg: #fdebec;
+  --color-error-border: #f4b9be;
+  --color-banner-bg: #fff1cc;
+  --color-banner-border: #f0d98a;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --color-bg: #0f1720;
+  --color-surface: #17222d;
+  --color-text: #e8eef5;
+  --color-text-muted: #b8c6d6;
+  --color-border: #2a3a4a;
+  --color-primary: #5ca9e2;
+  --color-success-bg: #173325;
+  --color-success-border: #2f6a49;
+  --color-error-bg: #3a1f24;
+  --color-error-border: #7a3a45;
+  --color-banner-bg: #4a3d1f;
+  --color-banner-border: #8b7338;
+  color-scheme: dark;
 }
 
 * {
@@ -10,6 +39,8 @@
 
 body {
   margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
 #app {

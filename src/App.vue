@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { RouterView } from 'vue-router'
 
+import ThemeHeader from '@/components/ThemeHeader.vue'
 import { useChangeStore } from '@/stores/changeStore'
 
 const changeStore = useChangeStore()
@@ -12,6 +13,8 @@ const { changeCount } = storeToRefs(changeStore)
 
 <template>
   <div>
+    <ThemeHeader />
+
     <aside v-if="changeCount > 0" class="change-banner">
       <strong>{{ changeCount }}</strong>
       <span>nicht uebertragene Aenderungen</span>
@@ -30,7 +33,7 @@ const { changeCount } = storeToRefs(changeStore)
   gap: 0.5rem;
   align-items: center;
   padding: 0.75rem 1rem;
-  background: #fff1cc;
-  border-bottom: 1px solid #f0d98a;
+  background: var(--color-banner-bg);
+  border-bottom: 1px solid var(--color-banner-border);
 }
 </style>

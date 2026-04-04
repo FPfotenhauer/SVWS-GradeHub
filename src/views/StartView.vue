@@ -307,14 +307,15 @@ async function ladeLehrerdateiAusData(): Promise<void> {
   max-width: 64rem;
   margin: 0 auto;
   padding: 1.5rem;
+  background-color: var(--color-bg);
 }
 
 .card {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
-  background: #ffffff;
-  border: 1px solid #e4e4e4;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
 }
 
@@ -335,7 +336,7 @@ async function ladeLehrerdateiAusData(): Promise<void> {
 }
 
 .card-toggle span {
-  color: #525252;
+  color: var(--color-text-muted);
   font-size: 0.95rem;
 }
 
@@ -347,6 +348,7 @@ async function ladeLehrerdateiAusData(): Promise<void> {
 label {
   display: grid;
   gap: 0.35rem;
+  color: var(--color-text);
 }
 
 input,
@@ -354,6 +356,14 @@ select,
 button {
   font: inherit;
   padding: 0.5rem 0.625rem;
+}
+
+input,
+select {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
 }
 
 .button-row {
@@ -365,11 +375,20 @@ button {
 button {
   width: fit-content;
   cursor: pointer;
+  color: #ffffff;
+  background: var(--color-primary);
+  border: 0;
+  border-radius: 0.4rem;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .help {
   margin: 0;
-  color: #444;
+  color: var(--color-text-muted);
 }
 
 .status,
@@ -380,12 +399,12 @@ button {
 }
 
 .status {
-  background: #e8f6ea;
-  border: 1px solid #b8debd;
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
 }
 
 .error {
-  background: #fdebec;
-  border: 1px solid #f4b9be;
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
 }
 </style>
