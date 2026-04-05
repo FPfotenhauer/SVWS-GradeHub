@@ -9,6 +9,7 @@ interface Props {
   modelValue: string
   gruppen: readonly EnmFloskelgruppe[]
   erlaubteGruppen: readonly string[]
+  faecher: readonly EnmFach[]
   schueler: EnmSchueler | null
   fach: EnmFach | null
 }
@@ -32,6 +33,7 @@ const searchInput = ref<HTMLInputElement | null>(null)
 const suchbegriff = ref('')
 const entwurf = ref('')
 const aktiveGruppe = ref<string>('alle')
+const aktivesFach = ref<string>('alle')
 const ausgewaehlteFloskelId = ref<string>('')
 
 function escapeRegExp(value: string): string {
@@ -92,17 +94,43 @@ const erlaubteGruppenSet = computed(() => {
   return werte
 })
 
-const verfuegbareGruppen = computed(() => {
-  const fachId = props.fach?.id ?? null
-  const jahrgangId = props.schueler?.jahrgangID ?? null
+const gruppenBasis = computed(() => {
+  return props.gruppen.filter((gruppe) => {
+    return erlaubteGruppenSet.value.has(gruppe.kuerzel) || erlaubteGruppenSet.value.has(gruppe.hauptgruppe)
+  })
+})
 
-  return props.gruppen
-    .filter((gruppe) => {
-      return erlaubteGruppenSet.value.has(gruppe.kuerzel) || erlaubteGruppenSet.value.has(gruppe.hauptgruppe)
-    })
+const fachOptionen = computed(() => {
+  const ids = new Set<number>()
+
+  for (const gruppe of gruppenBasis.value) {
+    for (const floskel of gruppe.floskeln) {
+      if (floskel.fachID !== null) {
+        ids.add(floskel.fachID)
+      }
+    }
+  }
+
+  return props.faecher
+    .filter((fach) => ids.has(fach.id))
+    .sort((a, b) => a.sortierung - b.sortierung)
+    .map((fach) => ({
+      id: String(fach.id),
+      label: fach.kuerzelAnzeige || fach.kuerzel,
+      beschreibung: fach.bezeichnung ?? '',
+    }))
+})
+
+const verfuegbareGruppen = computed(() => {
+  const jahrgangId = props.schueler?.jahrgangID ?? null
+  const fachFilterId = aktivesFach.value === 'alle' ? null : Number(aktivesFach.value)
+
+  return gruppenBasis.value
     .map((gruppe) => {
       const floskeln = gruppe.floskeln.filter((floskel) => {
-        const fachPassend = floskel.fachID === null || fachId === null || floskel.fachID === fachId
+        const fachPassend = fachFilterId === null
+          ? true
+          : floskel.fachID === fachFilterId
         const jahrgangPassend = floskel.jahrgangID === null || jahrgangId === null || floskel.jahrgangID === jahrgangId
         return fachPassend && jahrgangPassend
       })
@@ -155,11 +183,24 @@ const ausgewaehlteFloskel = computed(() => {
     ?? null
 })
 
+const initialeGruppe = computed<string>(() => {
+  return props.erlaubteGruppen[0] ?? 'alle'
+})
+
+const initialesFach = computed<string>(() => {
+  const aktuellesFachId = props.fach ? String(props.fach.id) : 'alle'
+  if (fachOptionen.value.some((fach) => fach.id === aktuellesFachId)) {
+    return aktuellesFachId
+  }
+  return 'alle'
+})
+
 watch(() => props.open, async (isOpen) => {
   if (!isOpen) return
 
   suchbegriff.value = ''
-  aktiveGruppe.value = 'alle'
+  aktiveGruppe.value = initialeGruppe.value
+  aktivesFach.value = initialesFach.value
   entwurf.value = props.modelValue
   ausgewaehlteFloskelId.value = gefilterteFloskeln.value[0]?.id ?? ''
 
@@ -249,6 +290,20 @@ function schliessen(): void {
               <span>{{ gruppe.anzahl }}</span>
             </button>
           </div>
+
+          <label v-if="fachOptionen.length > 0" class="floskel-fachfilter">
+            <span>Fach</span>
+            <select v-model="aktivesFach">
+              <option value="alle">Alle Fächer</option>
+              <option
+                v-for="fachOption in fachOptionen"
+                :key="fachOption.id"
+                :value="fachOption.id"
+              >
+                {{ fachOption.label }}<template v-if="fachOption.beschreibung"> - {{ fachOption.beschreibung }}</template>
+              </option>
+            </select>
+          </label>
         </div>
 
         <div class="floskel-layout">
@@ -402,14 +457,31 @@ function schliessen(): void {
 }
 
 .floskel-search {
-  min-width: min(320px, 100%);
+  flex: 0 1 300px;
+  min-width: 220px;
   display: grid;
   gap: 0.45rem;
   font-size: 0.85rem;
   font-weight: 600;
 }
 
+.floskel-fachfilter {
+  flex: 0 1 240px;
+  min-width: 180px;
+  margin-left: auto;
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.floskel-groups {
+  flex: 1 1 auto;
+  min-width: 240px;
+}
+
 .floskel-search input,
+.floskel-fachfilter select,
 .floskel-editor textarea {
   width: 100%;
   border: 1.5px solid var(--color-border);
@@ -425,7 +497,12 @@ function schliessen(): void {
   padding: 0.8rem 0.95rem;
 }
 
+.floskel-fachfilter select {
+  padding: 0.8rem 0.95rem;
+}
+
 .floskel-search input:focus,
+.floskel-fachfilter select:focus,
 .floskel-editor textarea:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 16%, transparent);
@@ -585,6 +662,11 @@ function schliessen(): void {
 
   .floskel-layout {
     grid-template-columns: 1fr;
+  }
+
+  .floskel-fachfilter {
+    margin-left: 0;
+    flex-basis: 240px;
   }
 
   .floskel-list-column {

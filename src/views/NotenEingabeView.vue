@@ -36,6 +36,7 @@ const fach = computed(() => {
 const fachKuerzel = computed(() => fach.value?.kuerzelAnzeige || fach.value?.kuerzel || '?')
 const fachBezeichnung = computed(() => fach.value?.bezeichnung ?? fach.value?.kuerzel ?? '')
 const floskelgruppen = computed(() => enmStore.enmDaten?.floskelgruppen ?? [])
+const faecher = computed(() => enmStore.enmDaten?.faecher ?? [])
 
 // Lehrerkürzel aus ENM-Daten für geaendertVon
 const lehrerKuerzel = computed<string>(() => {
@@ -882,6 +883,7 @@ function goSave(): void {
       :model-value="floskelDialog.value"
       :gruppen="floskelgruppen"
       :erlaubte-gruppen="['FACH']"
+      :faecher="faecher"
       :schueler="aktiverFloskelSchueler"
       :fach="fach"
       @close="closeFloskelDialog"
