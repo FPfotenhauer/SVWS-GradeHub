@@ -563,7 +563,7 @@ function goSave(): void {
 
     <!-- ── Sticky Header ───────────────────────────────────────────────── -->
     <header class="noten-header">
-      <button class="btn-back" type="button" @click="goBack">&#8592; Lerngruppen</button>
+      <button class="btn-save" type="button" @click="goBack">Lerngruppen</button>
 
       <div class="noten-header-info">
         <span class="fach-badge">{{ fachKuerzel }}</span>
@@ -829,21 +829,6 @@ function goSave(): void {
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   flex-wrap: wrap;
-}
-
-.btn-back {
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 0.35rem 0.7rem;
-  cursor: pointer;
-  color: var(--color-text);
-  font-size: 0.875rem;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.btn-back:hover {
-  background-color: var(--color-bg);
 }
 
 .btn-save {
