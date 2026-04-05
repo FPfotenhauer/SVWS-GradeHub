@@ -105,6 +105,21 @@ export interface EnmLerngruppe {
   wochenstunden: number
 }
 
+export interface EnmFloskel {
+  kuerzel: string
+  text: string
+  fachID: number | null
+  niveau: string | null
+  jahrgangID: number | null
+}
+
+export interface EnmFloskelgruppe {
+  kuerzel: string
+  bezeichnung: string
+  hauptgruppe: string
+  floskeln: readonly EnmFloskel[]
+}
+
 // ---------------------------------------------------------------------------
 // Schüler-bezogene Typen
 // ---------------------------------------------------------------------------
@@ -224,7 +239,7 @@ export interface EnmExport {
   foerderschwerpunkte: unknown[]
   jahrgaenge: EnmJahrgang[]
   klassen: EnmKlasse[]
-  floskelgruppen: unknown[]
+  floskelgruppen: EnmFloskelgruppe[]
   lehrer: EnmLehrer[]
   faecher: EnmFach[]
   ankreuzkompetenzen: unknown[]

@@ -2,11 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import FloskelPickerDialog from '@/components/FloskelPickerDialog.vue'
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { LeistungsFeld } from '@/types/changes'
-import type { EnmLeistungsdaten, EnmSchueler } from '@/types/enm'
+import type { EnmFloskelgruppe, EnmLeistungsdaten, EnmSchueler } from '@/types/enm'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +35,7 @@ const fach = computed(() => {
 
 const fachKuerzel = computed(() => fach.value?.kuerzelAnzeige || fach.value?.kuerzel || '?')
 const fachBezeichnung = computed(() => fach.value?.bezeichnung ?? fach.value?.kuerzel ?? '')
+const floskelgruppen = computed(() => enmStore.enmDaten?.floskelgruppen ?? [])
 
 // Lehrerkürzel aus ENM-Daten für geaendertVon
 const lehrerKuerzel = computed<string>(() => {
@@ -108,6 +110,17 @@ const fehlstundenFachInputs = ref<(HTMLInputElement | null)[]>([])
 const fehlstundenUnentschuldigtFachInputs = ref<(HTMLInputElement | null)[]>([])
 const bemerkungInputs = ref<(HTMLInputElement | null)[]>([])
 const focusedRow = ref<number>(-1)
+const floskelDialog = reactive<{
+  open: boolean
+  schuelerId: number | null
+  index: number
+  value: string
+}>({
+  open: false,
+  schuelerId: null,
+  index: -1,
+  value: '',
+})
 
 type EditField =
   | 'note'
@@ -531,6 +544,47 @@ function onBemerkungBlur(event: FocusEvent, schueler: EnmSchueler, index: number
   commitField(schueler, 'fachbezogeneBemerkungen', input.value, index, false)
 }
 
+const aktiverFloskelSchueler = computed(() => {
+  if (floskelDialog.schuelerId === null) return null
+  return schuelerListe.value.find((schueler) => schueler.id === floskelDialog.schuelerId) ?? null
+})
+
+function openFloskelDialog(schueler: EnmSchueler, index: number): void {
+  floskelDialog.open = true
+  floskelDialog.schuelerId = schueler.id
+  floskelDialog.index = index
+  floskelDialog.value = editValues.get(editKey(schueler.id, 'fachbezogeneBemerkungen'))
+    ?? originalFieldValue(schueler, 'fachbezogeneBemerkungen')
+}
+
+function closeFloskelDialog(): void {
+  floskelDialog.open = false
+  floskelDialog.schuelerId = null
+  floskelDialog.index = -1
+  floskelDialog.value = ''
+}
+
+function applyFloskelDialog(value: string): void {
+  const schueler = aktiverFloskelSchueler.value
+  const index = floskelDialog.index
+
+  if (!schueler || index < 0) {
+    closeFloskelDialog()
+    return
+  }
+
+  const input = bemerkungInputs.value[index]
+  if (input) {
+    input.value = value
+  }
+
+  invalidIds.delete(invalidKey(schueler.id, 'fachbezogeneBemerkungen'))
+  commitField(schueler, 'fachbezogeneBemerkungen', value, index, false)
+  closeFloskelDialog()
+
+  nextTick(() => focusFieldAt(index, 'fachbezogeneBemerkungen'))
+}
+
 function hasAnyRowChange(schueler: EnmSchueler): boolean {
   return (
     hasChange(schueler, 'note')
@@ -777,22 +831,32 @@ function goSave(): void {
               />
             </td>
             <td class="col-bemerkung">
-              <input
-                class="bemerkung-input"
-                :class="{
-                  'note-geaendert': hasChange(schueler, 'fachbezogeneBemerkungen'),
-                }"
-                type="text"
-                autocomplete="off"
-                autocorrect="off"
-                spellcheck="false"
-                :placeholder="originalFieldValue(schueler, 'fachbezogeneBemerkungen')"
-                :ref="(el) => setBemerkungInputRef(el, idx)"
-                @input="onBemerkungInput($event, schueler, idx)"
-                @keydown="onFieldKeydown($event, schueler, idx, 'fachbezogeneBemerkungen')"
-                @blur="onBemerkungBlur($event, schueler, idx)"
-                @focus="focusedRow = idx"
-              />
+              <div class="bemerkung-field">
+                <input
+                  class="bemerkung-input"
+                  :class="{
+                    'note-geaendert': hasChange(schueler, 'fachbezogeneBemerkungen'),
+                  }"
+                  type="text"
+                  autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  :placeholder="originalFieldValue(schueler, 'fachbezogeneBemerkungen')"
+                  :ref="(el) => setBemerkungInputRef(el, idx)"
+                  @input="onBemerkungInput($event, schueler, idx)"
+                  @keydown="onFieldKeydown($event, schueler, idx, 'fachbezogeneBemerkungen')"
+                  @blur="onBemerkungBlur($event, schueler, idx)"
+                  @focus="focusedRow = idx"
+                  @dblclick="openFloskelDialog(schueler, idx)"
+                />
+                <button
+                  class="bemerkung-picker-button"
+                  type="button"
+                  @click="openFloskelDialog(schueler, idx)"
+                >
+                  Floskeln
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -811,6 +875,18 @@ function goSave(): void {
         </footer>
       </div>
     </div>
+
+    <FloskelPickerDialog
+      :open="floskelDialog.open"
+      title="Fachbezogene Bemerkung auswählen"
+      :model-value="floskelDialog.value"
+      :gruppen="floskelgruppen"
+      :erlaubte-gruppen="['FACH']"
+      :schueler="aktiverFloskelSchueler"
+      :fach="fach"
+      @close="closeFloskelDialog"
+      @apply="applyFloskelDialog"
+    />
 
   </main>
 </template>
@@ -1117,6 +1193,12 @@ function goSave(): void {
   text-align: left;
 }
 
+.bemerkung-field {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 /* ── Note-Input ──────────────────────────────────────────────────────────── */
 
 .note-input {
@@ -1197,7 +1279,7 @@ function goSave(): void {
 }
 
 .bemerkung-input {
-  width: 100%;
+  flex: 1;
   min-width: 0;
   padding: 0.3rem 0.5rem;
   border: 1.5px solid var(--color-border);
@@ -1223,6 +1305,24 @@ function goSave(): void {
 
 :root[data-theme='dark'] .bemerkung-input.note-geaendert {
   color: #86efac;
+}
+
+.bemerkung-picker-button {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 90%, white 10%);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bemerkung-picker-button:hover,
+.bemerkung-picker-button:focus-visible {
+  border-color: var(--color-primary);
 }
 
 /* ── Fallback ────────────────────────────────────────────────────────────── */
@@ -1274,5 +1374,16 @@ code {
   font-size: 0.78rem;
   color: var(--color-primary);
   font-family: monospace;
+}
+
+@media (max-width: 900px) {
+  .bemerkung-field {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bemerkung-picker-button {
+    width: 100%;
+  }
 }
 </style>
