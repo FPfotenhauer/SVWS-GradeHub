@@ -89,6 +89,12 @@ function concatText(base: string, addition: string): string {
   return `${trimmedBase} ${trimmedAddition}`
 }
 
+function normalizeNiveau(value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  const normalized = String(value).trim()
+  return normalized === '' ? null : normalized
+}
+
 const erlaubteGruppenSet = computed(() => {
   const werte = new Set<string>(['ALLG'])
   for (const gruppe of props.erlaubteGruppen) {
@@ -129,9 +135,8 @@ const niveauOptionen = computed(() => {
 
   for (const gruppe of gruppenBasis.value) {
     for (const floskel of gruppe.floskeln) {
-      if (floskel.niveau !== null && floskel.niveau !== undefined && floskel.niveau !== '') {
-        werte.add(String(floskel.niveau))
-      }
+      const niveau = normalizeNiveau(floskel.niveau)
+      if (niveau !== null) werte.add(niveau)
     }
   }
 
@@ -154,7 +159,7 @@ const jahrgangOptionen = computed(() => {
 const verfuegbareGruppen = computed(() => {
   const fachFilterId = aktivesFach.value === 'alle' ? null : Number(aktivesFach.value)
   const jahrgangFilterId = aktiverJahrgang.value === 'alle' ? null : Number(aktiverJahrgang.value)
-  const niveauFilter = aktivesNiveau.value === 'alle' ? null : aktivesNiveau.value
+  const niveauFilter = aktivesNiveau.value === 'alle' ? null : normalizeNiveau(aktivesNiveau.value)
 
   return gruppenBasis.value
     .map((gruppe) => {
@@ -164,7 +169,7 @@ const verfuegbareGruppen = computed(() => {
           : floskel.fachID === fachFilterId
         const niveauPassend = niveauFilter === null
           ? true
-          : floskel.niveau === niveauFilter
+          : normalizeNiveau(floskel.niveau) === niveauFilter
         const jahrgangPassend = jahrgangFilterId === null
           ? true
           : floskel.jahrgangID === jahrgangFilterId
@@ -395,7 +400,15 @@ function schliessen(): void {
                 >
                   <div class="floskel-card-meta">
                     <span class="floskel-card-group">{{ item.gruppeBezeichnung }}</span>
-                    <span class="floskel-card-code">{{ item.floskel.kuerzel }}</span>
+                    <span class="floskel-card-code-wrap">
+                      <span
+                        v-if="item.gruppeKuerzel === 'FACH' && normalizeNiveau(item.floskel.niveau)"
+                        class="floskel-card-code"
+                      >
+                        Niveau: {{ normalizeNiveau(item.floskel.niveau) }}
+                      </span>
+                      <span class="floskel-card-code">{{ item.floskel.kuerzel }}</span>
+                    </span>
                   </div>
                   <p class="floskel-card-text">{{ item.textGerendert }}</p>
                 </article>
@@ -708,6 +721,12 @@ function schliessen(): void {
 .floskel-card-code {
   color: var(--color-text-muted);
   font-family: 'Noto Sans Mono', 'Courier New', monospace;
+}
+
+.floskel-card-code-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
 }
 
 .floskel-card-text,
