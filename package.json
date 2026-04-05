@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build --config vite.offline.config.ts",
-    "build:server": "vue-tsc --noEmit && vite build",
+    "build": "vue-tsc --noEmit && vite build",
+    "build:offline": "vue-tsc --noEmit && vite build --config vite.offline.config.ts",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",

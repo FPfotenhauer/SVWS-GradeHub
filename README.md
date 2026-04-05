@@ -58,11 +58,26 @@ npm install
 npm run dev
 ```
 
-### Build erzeugen
+### Build erzeugen (Standard)
 
 ```bash
 npm run build
 ```
+
+Dieser Build erzeugt in `dist/` eine `index.html` sowie den Ordner `assets/` mit:
+
+- `assets/app.js`
+- `assets/app.css`
+
+Geeignet fuer Deployment auf statischem Webserver und fuer den direkten Start von `dist/index.html` im Browser.
+
+### Offline-Singlefile-Build erzeugen
+
+```bash
+npm run build:offline
+```
+
+Dieser Build erzeugt eine einzelne `dist/index.html` mit inline eingebetteten Assets.
 
 ### Vorschau des Builds
 
