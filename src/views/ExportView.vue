@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { gzipSync, strToU8 } from 'fflate'
 
 import { useAuthStore } from '@/stores/authStore'
 import { useChangeStore } from '@/stores/changeStore'
@@ -49,7 +48,7 @@ const dataSourceLabel = computed<string>(() => {
 })
 
 const canSaveToServer = computed<boolean>(() => {
-  return effectiveDataSource.value === 'api' && isConfigured.value
+  return effectiveDataSource.value === 'api'
 })
 
 const isFileSource = computed<boolean>(() => effectiveDataSource.value === 'file')
@@ -213,8 +212,7 @@ async function saveAsFile(content: EnmExport): Promise<void> {
 
 async function saveToServer(content: EnmExport): Promise<void> {
   const endpoint = `${authStore.baseUrl.replace(/\/$/, '')}/db/${authStore.schema}/enm/v2/import`
-  const payload = gzipSync(strToU8(JSON.stringify(content)))
-  const body = new Uint8Array(Array.from(payload)).buffer
+  const body = JSON.stringify(content)
 
   let response: Response
   try {
@@ -222,8 +220,8 @@ async function saveToServer(content: EnmExport): Promise<void> {
       method: 'POST',
       headers: {
         Authorization: `Basic ${window.btoa(`${authStore.username}:${authStore.password}`)}`,
-        Accept: 'application/json, application/octet-stream',
-        'Content-Type': 'application/octet-stream',
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
       body,
     })
@@ -315,16 +313,13 @@ function goBack(): void {
       <p class="hint" v-else>
         Es wird ein Rückschreibe-Dialog für den SVWS-Server angeboten.
       </p>
-      <p class="hint" v-if="effectiveDataSource === 'api' && !canSaveToServer">
-        Rückschreiben ist erst möglich, wenn gültige Server-Zugangsdaten vorliegen.
-      </p>
 
       <div class="actions">
         <button class="secondary" type="button" @click="goBack">Zurück</button>
         <button
           class="primary"
           type="button"
-          :disabled="isSaving || changeCount === 0 || (effectiveDataSource === 'api' && !canSaveToServer)"
+          :disabled="isSaving || changeCount === 0"
           @click="onSave"
         >
           {{ effectiveDataSource === 'api' ? 'Zum Server speichern' : 'Datei speichern' }}
