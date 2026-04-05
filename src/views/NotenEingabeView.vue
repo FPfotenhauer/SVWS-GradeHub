@@ -594,8 +594,11 @@ function goSave(): void {
     </div>
 
     <!-- ── Notentabelle ────────────────────────────────────────────────── -->
-    <div v-else class="tabelle-wrapper">
-      <table class="notentabelle">
+    <div v-else class="tabelle-section">
+      <div class="tabelle-gap" aria-hidden="true" />
+
+      <div class="tabelle-wrapper">
+        <table class="notentabelle">
         <colgroup>
           <col :style="{ width: `${columnWidths.nr}px` }" />
           <col :style="{ width: `${columnWidths.name}px` }" />
@@ -793,20 +796,21 @@ function goSave(): void {
             </td>
           </tr>
         </tbody>
-      </table>
-    </div>
+        </table>
 
-    <!-- ── Tastatur-Hinweise ────────────────────────────────────────────── -->
-    <footer class="noteneingabe-footer">
-      <p class="tastatur-hinweis">
-        <kbd>↵</kbd> oder <kbd>↓</kbd>&ensp;nächste Zeile&emsp;
-        <kbd>↑</kbd>&ensp;vorherige Zeile&emsp;
-        <kbd>Tab</kbd>&ensp;nächstes Feld&emsp;
-        <kbd>Esc</kbd>&ensp;Eingabe abbrechen&emsp;
-        Gültig: <code>1</code>–<code>6</code>, <code>+</code>/<code>-</code>,
-        <code>NT</code>, <code>NE</code>, <code>NB</code>, <code>AT</code>, …
-      </p>
-    </footer>
+        <!-- ── Tastatur-Hinweise ────────────────────────────────────────────── -->
+        <footer class="noteneingabe-footer">
+          <p class="tastatur-hinweis">
+            <kbd>↵</kbd> oder <kbd>↓</kbd>&ensp;nächste Zeile&emsp;
+            <kbd>↑</kbd>&ensp;vorherige Zeile&emsp;
+            <kbd>Tab</kbd>&ensp;nächstes Feld&emsp;
+            <kbd>Esc</kbd>&ensp;Eingabe abbrechen&emsp;
+            Gültig: <code>1</code>–<code>6</code>, <code>+</code>/<code>-</code>,
+            <code>NT</code>, <code>NE</code>, <code>NB</code>, <code>AT</code>, …
+          </p>
+        </footer>
+      </div>
+    </div>
 
   </main>
 </template>
@@ -814,20 +818,26 @@ function goSave(): void {
 <style scoped>
 .noteneingabe {
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background-color: var(--color-bg);
 }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
 
 .noten-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 1rem;
   padding: 0.6rem 1.5rem;
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-border) 35%, transparent);
   flex-wrap: wrap;
 }
 
@@ -924,8 +934,25 @@ function goSave(): void {
 
 .tabelle-wrapper {
   flex: 1;
+  min-height: 0;
+  position: relative;
   overflow: auto;
-  padding: 1.25rem 1.5rem;
+  padding: 0 1.5rem;
+  background-color: var(--color-bg);
+}
+
+.tabelle-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg);
+}
+
+.tabelle-gap {
+  height: 1rem;
+  flex: 0 0 auto;
+  background-color: var(--color-bg);
 }
 
 .notentabelle {
@@ -944,15 +971,16 @@ function goSave(): void {
   position: sticky;
   top: 0;
   z-index: 12;
-  background-color: var(--color-bg);
-  color: var(--color-text-muted);
+  background-color: color-mix(in srgb, var(--color-primary) 85%, #000 15%);
+  color: #ffffff;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 0.55rem 1rem 0.55rem 0.75rem;
   text-align: left;
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 2px solid color-mix(in srgb, #000 35%, var(--color-primary));
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, #000 30%, transparent);
 }
 
 .notentabelle th,
@@ -1219,6 +1247,7 @@ function goSave(): void {
   padding: 0.6rem 1.5rem;
   border-top: 1px solid var(--color-border);
   background-color: var(--color-surface);
+  box-shadow: 0 -2px 10px color-mix(in srgb, var(--color-border) 35%, transparent);
 }
 
 .tastatur-hinweis {
