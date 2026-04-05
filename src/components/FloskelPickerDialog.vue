@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 
-import type { EnmFach, EnmFloskel, EnmFloskelgruppe, EnmSchueler } from '@/types/enm'
+import type { EnmFach, EnmFloskel, EnmFloskelgruppe, EnmJahrgang, EnmSchueler } from '@/types/enm'
 
 interface Props {
   open: boolean
@@ -10,6 +10,7 @@ interface Props {
   gruppen: readonly EnmFloskelgruppe[]
   erlaubteGruppen: readonly string[]
   faecher: readonly EnmFach[]
+  jahrgaenge: readonly EnmJahrgang[]
   schueler: EnmSchueler | null
   fach: EnmFach | null
 }
@@ -34,6 +35,8 @@ const suchbegriff = ref('')
 const entwurf = ref('')
 const aktiveGruppe = ref<string>('alle')
 const aktivesFach = ref<string>('alle')
+const aktivesNiveau = ref<string>('alle')
+const aktiverJahrgang = ref<string>('alle')
 const ausgewaehlteFloskelId = ref<string>('')
 
 function escapeRegExp(value: string): string {
@@ -121,9 +124,37 @@ const fachOptionen = computed(() => {
     }))
 })
 
+const niveauOptionen = computed(() => {
+  const werte = new Set<string>()
+
+  for (const gruppe of gruppenBasis.value) {
+    for (const floskel of gruppe.floskeln) {
+      if (floskel.niveau !== null && floskel.niveau !== undefined && floskel.niveau !== '') {
+        werte.add(String(floskel.niveau))
+      }
+    }
+  }
+
+  return [...werte].sort((a, b) => a.localeCompare(b, 'de')).map((niveau) => ({
+    id: niveau,
+    label: niveau,
+  }))
+})
+
+const jahrgangOptionen = computed(() => {
+  return [...props.jahrgaenge]
+    .sort((a: EnmJahrgang, b: EnmJahrgang) => a.sortierung - b.sortierung)
+    .map((jahrgang: EnmJahrgang) => ({
+      id: String(jahrgang.id),
+      label: jahrgang.kuerzelAnzeige || jahrgang.kuerzel,
+      beschreibung: jahrgang.beschreibung,
+    }))
+})
+
 const verfuegbareGruppen = computed(() => {
-  const jahrgangId = props.schueler?.jahrgangID ?? null
   const fachFilterId = aktivesFach.value === 'alle' ? null : Number(aktivesFach.value)
+  const jahrgangFilterId = aktiverJahrgang.value === 'alle' ? null : Number(aktiverJahrgang.value)
+  const niveauFilter = aktivesNiveau.value === 'alle' ? null : aktivesNiveau.value
 
   return gruppenBasis.value
     .map((gruppe) => {
@@ -131,8 +162,13 @@ const verfuegbareGruppen = computed(() => {
         const fachPassend = fachFilterId === null
           ? true
           : floskel.fachID === fachFilterId
-        const jahrgangPassend = floskel.jahrgangID === null || jahrgangId === null || floskel.jahrgangID === jahrgangId
-        return fachPassend && jahrgangPassend
+        const niveauPassend = niveauFilter === null
+          ? true
+          : floskel.niveau === niveauFilter
+        const jahrgangPassend = jahrgangFilterId === null
+          ? true
+          : floskel.jahrgangID === jahrgangFilterId
+        return fachPassend && niveauPassend && jahrgangPassend
       })
       return {
         ...gruppe,
@@ -201,6 +237,8 @@ watch(() => props.open, async (isOpen) => {
   suchbegriff.value = ''
   aktiveGruppe.value = initialeGruppe.value
   aktivesFach.value = initialesFach.value
+  aktivesNiveau.value = 'alle'
+  aktiverJahrgang.value = 'alle'
   entwurf.value = props.modelValue
   ausgewaehlteFloskelId.value = gefilterteFloskeln.value[0]?.id ?? ''
 
@@ -227,6 +265,13 @@ function waehleFloskel(id: string): void {
 function fuegeFloskelEin(item: FloskelListItem): void {
   entwurf.value = concatText(entwurf.value, item.textGerendert)
   ausgewaehlteFloskelId.value = item.id
+}
+
+function setzeGruppe(gruppe: string): void {
+  aktiveGruppe.value = gruppe
+  if (gruppe === 'alle') {
+    aktivesFach.value = 'alle'
+  }
 }
 
 function uebernehmen(): void {
@@ -274,7 +319,7 @@ function schliessen(): void {
               class="floskel-chip"
               :class="{ 'is-active': aktiveGruppe === 'alle' }"
               type="button"
-              @click="aktiveGruppe = 'alle'"
+              @click="setzeGruppe('alle')"
             >
               Alle
             </button>
@@ -284,14 +329,14 @@ function schliessen(): void {
               class="floskel-chip"
               :class="{ 'is-active': aktiveGruppe === gruppe.kuerzel }"
               type="button"
-              @click="aktiveGruppe = gruppe.kuerzel"
+              @click="setzeGruppe(gruppe.kuerzel)"
             >
               {{ gruppe.bezeichnung }}
               <span>{{ gruppe.anzahl }}</span>
             </button>
           </div>
 
-          <label v-if="fachOptionen.length > 0" class="floskel-fachfilter">
+          <label v-if="fachOptionen.length > 0" class="floskel-fachfilter floskel-fachfilter-wide">
             <span>Fach</span>
             <select v-model="aktivesFach">
               <option value="alle">Alle Fächer</option>
@@ -301,6 +346,34 @@ function schliessen(): void {
                 :value="fachOption.id"
               >
                 {{ fachOption.label }}<template v-if="fachOption.beschreibung"> - {{ fachOption.beschreibung }}</template>
+              </option>
+            </select>
+          </label>
+
+          <label v-if="niveauOptionen.length > 0" class="floskel-fachfilter floskel-fachfilter-narrow">
+            <span>Niveau</span>
+            <select v-model="aktivesNiveau">
+              <option value="alle">Alle</option>
+              <option
+                v-for="niveauOption in niveauOptionen"
+                :key="niveauOption.id"
+                :value="niveauOption.id"
+              >
+                {{ niveauOption.label }}
+              </option>
+            </select>
+          </label>
+
+          <label class="floskel-fachfilter floskel-fachfilter-narrow">
+            <span>Jahrgang</span>
+            <select v-model="aktiverJahrgang">
+              <option value="alle">Alle</option>
+              <option
+                v-for="jahrgangOption in jahrgangOptionen"
+                :key="jahrgangOption.id"
+                :value="jahrgangOption.id"
+              >
+                {{ jahrgangOption.label }}<template v-if="jahrgangOption.beschreibung"> - {{ jahrgangOption.beschreibung }}</template>
               </option>
             </select>
           </label>
@@ -373,6 +446,7 @@ function schliessen(): void {
 
 .floskel-dialog {
   width: min(1520px, calc(100vw - 2rem));
+  height: calc(100vh - 2rem);
   max-height: calc(100vh - 2rem);
   display: flex;
   flex-direction: column;
@@ -450,34 +524,45 @@ function schliessen(): void {
 
 .floskel-toolbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  flex-wrap: nowrap;
+  gap: 0.6rem;
   align-items: flex-end;
+  padding-top: 0.7rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--color-border);
 }
 
 .floskel-search {
-  flex: 0 1 300px;
+  flex: 0 0 220px;
   min-width: 220px;
   display: grid;
-  gap: 0.45rem;
-  font-size: 0.85rem;
+  gap: 0.3rem;
+  font-size: 0.78rem;
   font-weight: 600;
 }
 
 .floskel-fachfilter {
-  flex: 0 1 240px;
-  min-width: 180px;
-  margin-left: auto;
+  flex: 0 0 auto;
   display: grid;
-  gap: 0.45rem;
-  font-size: 0.85rem;
+  gap: 0.3rem;
+  font-size: 0.78rem;
   font-weight: 600;
+}
+
+.floskel-fachfilter-wide {
+  width: 200px;
+  min-width: 200px;
+  margin-left: auto;
+}
+
+.floskel-fachfilter-narrow {
+  width: 96px;
+  min-width: 96px;
 }
 
 .floskel-groups {
   flex: 1 1 auto;
-  min-width: 240px;
+  min-width: 0;
 }
 
 .floskel-search input,
@@ -494,11 +579,16 @@ function schliessen(): void {
 }
 
 .floskel-search input {
-  padding: 0.8rem 0.95rem;
+  min-height: 2.4rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 12px;
 }
 
 .floskel-fachfilter select {
-  padding: 0.8rem 0.95rem;
+  min-height: 2.4rem;
+  padding: 0.45rem 2rem 0.45rem 0.8rem;
+  border-radius: 12px;
+  line-height: 1.2;
 }
 
 .floskel-search input:focus,
@@ -510,27 +600,34 @@ function schliessen(): void {
 
 .floskel-groups {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.1rem;
+  scrollbar-width: thin;
 }
 
 .floskel-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 0.85rem;
+  gap: 0.35rem;
+  min-height: 2.35rem;
+  padding: 0.38rem 0.72rem;
+  font-size: 0.8rem;
+  line-height: 1.1;
 }
 
 .floskel-chip span {
   display: inline-grid;
   place-items: center;
-  min-width: 1.5rem;
-  min-height: 1.5rem;
+  min-width: 1.3rem;
+  min-height: 1.3rem;
   padding: 0 0.25rem;
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   color: var(--color-primary);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .floskel-chip.is-active {
@@ -656,6 +753,7 @@ function schliessen(): void {
 @media (max-width: 980px) {
   .floskel-dialog {
     width: 100%;
+    height: calc(100vh - 1.5rem);
     max-height: calc(100vh - 1.5rem);
     border-radius: 20px;
   }
@@ -664,9 +762,18 @@ function schliessen(): void {
     grid-template-columns: 1fr;
   }
 
+  .floskel-toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
   .floskel-fachfilter {
+    width: auto;
+    min-width: 180px;
+  }
+
+  .floskel-fachfilter-wide {
     margin-left: 0;
-    flex-basis: 240px;
   }
 
   .floskel-list-column {
