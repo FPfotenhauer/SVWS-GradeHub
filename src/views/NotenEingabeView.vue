@@ -2,11 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import FloskelPickerDialog from '@/components/FloskelPickerDialog.vue'
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { LeistungsFeld } from '@/types/changes'
-import type { EnmLeistungsdaten, EnmSchueler } from '@/types/enm'
+import type { EnmFloskelgruppe, EnmLeistungsdaten, EnmSchueler } from '@/types/enm'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +35,9 @@ const fach = computed(() => {
 
 const fachKuerzel = computed(() => fach.value?.kuerzelAnzeige || fach.value?.kuerzel || '?')
 const fachBezeichnung = computed(() => fach.value?.bezeichnung ?? fach.value?.kuerzel ?? '')
+const floskelgruppen = computed(() => enmStore.enmDaten?.floskelgruppen ?? [])
+const faecher = computed(() => enmStore.enmDaten?.faecher ?? [])
+const jahrgaenge = computed(() => enmStore.enmDaten?.jahrgaenge ?? [])
 
 // Lehrerkürzel aus ENM-Daten für geaendertVon
 const lehrerKuerzel = computed<string>(() => {
@@ -108,6 +112,17 @@ const fehlstundenFachInputs = ref<(HTMLInputElement | null)[]>([])
 const fehlstundenUnentschuldigtFachInputs = ref<(HTMLInputElement | null)[]>([])
 const bemerkungInputs = ref<(HTMLInputElement | null)[]>([])
 const focusedRow = ref<number>(-1)
+const floskelDialog = reactive<{
+  open: boolean
+  schuelerId: number | null
+  index: number
+  value: string
+}>({
+  open: false,
+  schuelerId: null,
+  index: -1,
+  value: '',
+})
 
 type EditField =
   | 'note'
@@ -531,6 +546,47 @@ function onBemerkungBlur(event: FocusEvent, schueler: EnmSchueler, index: number
   commitField(schueler, 'fachbezogeneBemerkungen', input.value, index, false)
 }
 
+const aktiverFloskelSchueler = computed(() => {
+  if (floskelDialog.schuelerId === null) return null
+  return schuelerListe.value.find((schueler) => schueler.id === floskelDialog.schuelerId) ?? null
+})
+
+function openFloskelDialog(schueler: EnmSchueler, index: number): void {
+  floskelDialog.open = true
+  floskelDialog.schuelerId = schueler.id
+  floskelDialog.index = index
+  floskelDialog.value = editValues.get(editKey(schueler.id, 'fachbezogeneBemerkungen'))
+    ?? originalFieldValue(schueler, 'fachbezogeneBemerkungen')
+}
+
+function closeFloskelDialog(): void {
+  floskelDialog.open = false
+  floskelDialog.schuelerId = null
+  floskelDialog.index = -1
+  floskelDialog.value = ''
+}
+
+function applyFloskelDialog(value: string): void {
+  const schueler = aktiverFloskelSchueler.value
+  const index = floskelDialog.index
+
+  if (!schueler || index < 0) {
+    closeFloskelDialog()
+    return
+  }
+
+  const input = bemerkungInputs.value[index]
+  if (input) {
+    input.value = value
+  }
+
+  invalidIds.delete(invalidKey(schueler.id, 'fachbezogeneBemerkungen'))
+  commitField(schueler, 'fachbezogeneBemerkungen', value, index, false)
+  closeFloskelDialog()
+
+  nextTick(() => focusFieldAt(index, 'fachbezogeneBemerkungen'))
+}
+
 function hasAnyRowChange(schueler: EnmSchueler): boolean {
   return (
     hasChange(schueler, 'note')
@@ -563,7 +619,7 @@ function goSave(): void {
 
     <!-- ── Sticky Header ───────────────────────────────────────────────── -->
     <header class="noten-header">
-      <button class="btn-back" type="button" @click="goBack">&#8592; Lerngruppen</button>
+      <button class="btn-save" type="button" @click="goBack">Lerngruppen</button>
 
       <div class="noten-header-info">
         <span class="fach-badge">{{ fachKuerzel }}</span>
@@ -594,8 +650,11 @@ function goSave(): void {
     </div>
 
     <!-- ── Notentabelle ────────────────────────────────────────────────── -->
-    <div v-else class="tabelle-wrapper">
-      <table class="notentabelle">
+    <div v-else class="tabelle-section">
+      <div class="tabelle-gap" aria-hidden="true" />
+
+      <div class="tabelle-wrapper">
+        <table class="notentabelle">
         <colgroup>
           <col :style="{ width: `${columnWidths.nr}px` }" />
           <col :style="{ width: `${columnWidths.name}px` }" />
@@ -774,39 +833,64 @@ function goSave(): void {
               />
             </td>
             <td class="col-bemerkung">
-              <input
-                class="bemerkung-input"
-                :class="{
-                  'note-geaendert': hasChange(schueler, 'fachbezogeneBemerkungen'),
-                }"
-                type="text"
-                autocomplete="off"
-                autocorrect="off"
-                spellcheck="false"
-                :placeholder="originalFieldValue(schueler, 'fachbezogeneBemerkungen')"
-                :ref="(el) => setBemerkungInputRef(el, idx)"
-                @input="onBemerkungInput($event, schueler, idx)"
-                @keydown="onFieldKeydown($event, schueler, idx, 'fachbezogeneBemerkungen')"
-                @blur="onBemerkungBlur($event, schueler, idx)"
-                @focus="focusedRow = idx"
-              />
+              <div class="bemerkung-field">
+                <input
+                  class="bemerkung-input"
+                  :class="{
+                    'note-geaendert': hasChange(schueler, 'fachbezogeneBemerkungen'),
+                  }"
+                  type="text"
+                  autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  :placeholder="originalFieldValue(schueler, 'fachbezogeneBemerkungen')"
+                  :ref="(el) => setBemerkungInputRef(el, idx)"
+                  @input="onBemerkungInput($event, schueler, idx)"
+                  @keydown="onFieldKeydown($event, schueler, idx, 'fachbezogeneBemerkungen')"
+                  @blur="onBemerkungBlur($event, schueler, idx)"
+                  @focus="focusedRow = idx"
+                  @dblclick="openFloskelDialog(schueler, idx)"
+                />
+                <button
+                  class="bemerkung-picker-button"
+                  type="button"
+                  @click="openFloskelDialog(schueler, idx)"
+                >
+                  Floskeln
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
-      </table>
+        </table>
+
+        <!-- ── Tastatur-Hinweise ────────────────────────────────────────────── -->
+        <footer class="noteneingabe-footer">
+          <p class="tastatur-hinweis">
+            <kbd>↵</kbd> oder <kbd>↓</kbd>&ensp;nächste Zeile&emsp;
+            <kbd>↑</kbd>&ensp;vorherige Zeile&emsp;
+            <kbd>Tab</kbd>&ensp;nächstes Feld&emsp;
+            <kbd>Esc</kbd>&ensp;Eingabe abbrechen&emsp;
+            Gültig: <code>1</code>–<code>6</code>, <code>+</code>/<code>-</code>,
+            <code>NT</code>, <code>NE</code>, <code>NB</code>, <code>AT</code>, …
+          </p>
+        </footer>
+      </div>
     </div>
 
-    <!-- ── Tastatur-Hinweise ────────────────────────────────────────────── -->
-    <footer class="noteneingabe-footer">
-      <p class="tastatur-hinweis">
-        <kbd>↵</kbd> oder <kbd>↓</kbd>&ensp;nächste Zeile&emsp;
-        <kbd>↑</kbd>&ensp;vorherige Zeile&emsp;
-        <kbd>Tab</kbd>&ensp;nächstes Feld&emsp;
-        <kbd>Esc</kbd>&ensp;Eingabe abbrechen&emsp;
-        Gültig: <code>1</code>–<code>6</code>, <code>+</code>/<code>-</code>,
-        <code>NT</code>, <code>NE</code>, <code>NB</code>, <code>AT</code>, …
-      </p>
-    </footer>
+    <FloskelPickerDialog
+      :open="floskelDialog.open"
+      title="Fachbezogene Bemerkung auswählen"
+      :model-value="floskelDialog.value"
+      :gruppen="floskelgruppen"
+      :erlaubte-gruppen="['FACH']"
+      :faecher="faecher"
+      :jahrgaenge="jahrgaenge"
+      :schueler="aktiverFloskelSchueler"
+      :fach="fach"
+      @close="closeFloskelDialog"
+      @apply="applyFloskelDialog"
+    />
 
   </main>
 </template>
@@ -814,36 +898,27 @@ function goSave(): void {
 <style scoped>
 .noteneingabe {
   min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background-color: var(--color-bg);
 }
 
 /* ── Header ──────────────────────────────────────────────────────────────── */
 
 .noten-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   display: flex;
   align-items: center;
   gap: 1rem;
   padding: 0.6rem 1.5rem;
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-border) 35%, transparent);
   flex-wrap: wrap;
-}
-
-.btn-back {
-  background: none;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 0.35rem 0.7rem;
-  cursor: pointer;
-  color: var(--color-text);
-  font-size: 0.875rem;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.btn-back:hover {
-  background-color: var(--color-bg);
 }
 
 .btn-save {
@@ -939,8 +1014,25 @@ function goSave(): void {
 
 .tabelle-wrapper {
   flex: 1;
+  min-height: 0;
+  position: relative;
   overflow: auto;
-  padding: 1.25rem 1.5rem;
+  padding: 0 1.5rem;
+  background-color: var(--color-bg);
+}
+
+.tabelle-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg);
+}
+
+.tabelle-gap {
+  height: 1rem;
+  flex: 0 0 auto;
+  background-color: var(--color-bg);
 }
 
 .notentabelle {
@@ -959,15 +1051,16 @@ function goSave(): void {
   position: sticky;
   top: 0;
   z-index: 12;
-  background-color: var(--color-bg);
-  color: var(--color-text-muted);
+  background-color: color-mix(in srgb, var(--color-primary) 85%, #000 15%);
+  color: #ffffff;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 0.55rem 1rem 0.55rem 0.75rem;
   text-align: left;
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 2px solid color-mix(in srgb, #000 35%, var(--color-primary));
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, #000 30%, transparent);
 }
 
 .notentabelle th,
@@ -1104,6 +1197,12 @@ function goSave(): void {
   text-align: left;
 }
 
+.bemerkung-field {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 /* ── Note-Input ──────────────────────────────────────────────────────────── */
 
 .note-input {
@@ -1184,7 +1283,7 @@ function goSave(): void {
 }
 
 .bemerkung-input {
-  width: 100%;
+  flex: 1;
   min-width: 0;
   padding: 0.3rem 0.5rem;
   border: 1.5px solid var(--color-border);
@@ -1212,6 +1311,24 @@ function goSave(): void {
   color: #86efac;
 }
 
+.bemerkung-picker-button {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 90%, white 10%);
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.bemerkung-picker-button:hover,
+.bemerkung-picker-button:focus-visible {
+  border-color: var(--color-primary);
+}
+
 /* ── Fallback ────────────────────────────────────────────────────────────── */
 
 .kein-inhalt {
@@ -1234,6 +1351,7 @@ function goSave(): void {
   padding: 0.6rem 1.5rem;
   border-top: 1px solid var(--color-border);
   background-color: var(--color-surface);
+  box-shadow: 0 -2px 10px color-mix(in srgb, var(--color-border) 35%, transparent);
 }
 
 .tastatur-hinweis {
@@ -1260,5 +1378,16 @@ code {
   font-size: 0.78rem;
   color: var(--color-primary);
   font-family: monospace;
+}
+
+@media (max-width: 900px) {
+  .bemerkung-field {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .bemerkung-picker-button {
+    width: 100%;
+  }
 }
 </style>
