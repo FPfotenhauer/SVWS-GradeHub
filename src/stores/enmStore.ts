@@ -14,6 +14,8 @@ export interface LehrerKurzinfo {
   istAktiv: boolean
 }
 
+export type ENMDataSource = 'api' | 'file' | null
+
 function parseENMFromBytes(bytes: Uint8Array): ENMDaten {
   const isGzip = bytes.length > 2 && bytes[0] === GZIP_MAGIC_BYTE_1 && bytes[1] === GZIP_MAGIC_BYTE_2
   const json = isGzip ? strFromU8(decompressSync(bytes)) : strFromU8(bytes)
@@ -83,6 +85,8 @@ function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
 export const useENMStore = defineStore('enm', () => {
   const enmDaten = ref<ENMDaten | null>(null)
   const isLoaded = ref<boolean>(false)
+  const dataSource = ref<ENMDataSource>(null)
+  const sourceFileName = ref<string>('')
 
   async function ladeLehrerListeVomServer(baseUrl: string, schema: string, username: string, password: string): Promise<LehrerKurzinfo[]> {
     const cleanedBaseUrl = baseUrl.replace(/\/$/, '')
@@ -154,6 +158,8 @@ export const useENMStore = defineStore('enm', () => {
         const payload = new Uint8Array(await response.arrayBuffer())
         enmDaten.value = parseENMFromBytes(payload)
         isLoaded.value = true
+        dataSource.value = 'api'
+        sourceFileName.value = ''
         return
       } catch (error) {
         lastError = toFetchError(error, endpoint)
@@ -171,19 +177,31 @@ export const useENMStore = defineStore('enm', () => {
 
     enmDaten.value = parseENMFromBytes(payload)
     isLoaded.value = true
+    dataSource.value = 'file'
+    sourceFileName.value = file.name
+  }
+
+  function ersetzeENMDaten(next: ENMDaten): void {
+    enmDaten.value = next
+    isLoaded.value = true
   }
 
   function reset(): void {
     enmDaten.value = null
     isLoaded.value = false
+    dataSource.value = null
+    sourceFileName.value = ''
   }
 
   return {
     enmDaten: readonly(enmDaten),
     isLoaded: readonly(isLoaded),
+    dataSource: readonly(dataSource),
+    sourceFileName: readonly(sourceFileName),
     ladeLehrerListeVomServer,
     ladeENMVonServer,
     ladeENMVonDatei,
+    ersetzeENMDaten,
     reset,
   }
 })
