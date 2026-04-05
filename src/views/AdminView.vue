@@ -146,6 +146,40 @@ function toggleAlle(): void {
   }
 }
 
+function randomAlphanumeric(length: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = ''
+  const values = window.crypto.getRandomValues(new Uint8Array(length))
+  for (let i = 0; i < length; i++) {
+    const randomByte = values.at(i) ?? 0
+    result += chars.charAt(randomByte % chars.length)
+  }
+  return result
+}
+
+function generiereNotenpasswort(): string {
+  return [
+    randomAlphanumeric(4),
+    randomAlphanumeric(4),
+    randomAlphanumeric(4),
+    randomAlphanumeric(4),
+    randomAlphanumeric(4),
+    randomAlphanumeric(4),
+  ].join('-')
+}
+
+function generierePasswoerterFuerAuswahl(): void {
+  if (ausgewaehlt.value.size === 0) return
+
+  lehrer.value = lehrer.value.map((eintrag) => {
+    if (!ausgewaehlt.value.has(eintrag.id)) return eintrag
+    return {
+      ...eintrag,
+      notenpasswort: generiereNotenpasswort(),
+    }
+  })
+}
+
 function spaltenStil(key: SpaltenKey): { width: string; minWidth: string } {
   const breite = spaltenBreiten.value[key]
   return {
@@ -198,7 +232,17 @@ onUnmounted(() => {
 
     <section v-if="lehrer.length > 0" class="card">
       <div class="table-header">
-        <h2>Lehrkräfte ({{ sichtbareLehrer.length }})</h2>
+        <div class="table-header-left">
+          <h2>Lehrkräfte ({{ sichtbareLehrer.length }})</h2>
+          <button
+            class="btn-generate"
+            type="button"
+            :disabled="ausgewaehlt.size === 0"
+            @click="generierePasswoerterFuerAuswahl"
+          >
+            Passwörter generieren
+          </button>
+        </div>
         <div class="table-header-actions">
           <label class="toggle-label">
             <input v-model="nurAktive" type="checkbox" />
@@ -350,6 +394,12 @@ button:disabled {
   gap: 1rem;
 }
 
+.table-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .table-header-actions {
   display: flex;
   align-items: center;
@@ -367,6 +417,26 @@ button:disabled {
   background: transparent;
   border: 1px solid #dc2626;
   border-radius: 0.4rem;
+}
+
+.btn-generate {
+  font: inherit;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+}
+
+.btn-generate:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+}
+
+.btn-generate:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .btn-logout:hover {
