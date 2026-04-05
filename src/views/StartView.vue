@@ -325,6 +325,7 @@ async function ladeLehrerdateiAusData(): Promise<void> {
   justify-content: space-between;
   width: 100%;
   padding: 0;
+  color: var(--color-text);
   background: transparent;
   border: 0;
   cursor: pointer;
