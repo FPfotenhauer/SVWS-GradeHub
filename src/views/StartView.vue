@@ -225,6 +225,11 @@ async function ladeLehrerdateiAusData(): Promise<void> {
   }
 }
 
+function oeffneAdmin(): void {
+  authStore.setCredentials(baseUrl.value, schema.value, username.value, password.value)
+  router.push('/admin')
+}
+
 // Naechster Schritt: Versionspruefung fuer ENM-v2/v1 bereits beim Verbindungsdialog anzeigen.
 </script>
 
@@ -257,6 +262,7 @@ async function ladeLehrerdateiAusData(): Promise<void> {
         </label>
         <div class="button-row">
           <button :disabled="isLoading" type="button" @click="ladeLehrerListe">Lehrerliste laden</button>
+          <button class="secondary" type="button" @click="oeffneAdmin">Adminbereich</button>
         </div>
 
         <label v-if="lehrerListe.length > 0">
@@ -385,6 +391,12 @@ button {
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+button.secondary {
+  color: #dc2626;
+  background: transparent;
+  border: 1px solid #dc2626;
 }
 
 .help {
