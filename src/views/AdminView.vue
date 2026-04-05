@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
+import { useUIStore } from '@/stores/uiStore'
 
 interface LehrerEintrag {
   id: number
@@ -13,11 +15,20 @@ interface LehrerEintrag {
 }
 
 const authStore = useAuthStore()
+const uiStore = useUIStore()
 const router = useRouter()
+const { themePreference } = storeToRefs(uiStore)
 
 function logout(): void {
   authStore.clear()
   router.push('/')
+}
+
+function onThemeChange(event: Event): void {
+  const select = event.target as HTMLSelectElement
+  if (select.value === 'light' || select.value === 'dark' || select.value === 'system') {
+    uiStore.setThemePreference(select.value)
+  }
 }
 
 const isLoading = ref<boolean>(false)
@@ -225,7 +236,17 @@ onUnmounted(() => {
 
 <template>
   <main class="admin-view">
-    <h1>Notendatei Adminbereich</h1>
+    <div class="page-header">
+      <h1>Notendatei Adminbereich</h1>
+      <div class="theme-row">
+        <label class="theme-control" for="admin-theme-select">Theme</label>
+        <select id="admin-theme-select" :value="themePreference" @change="onThemeChange">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+    </div>
 
     <p v-if="isLoading" class="status">Lehrkräfte werden geladen…</p>
     <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
@@ -327,13 +348,16 @@ onUnmounted(() => {
   max-width: 100%;
   margin: 0 auto;
   padding: 1.5rem 3rem 3rem;
+  min-height: 100dvh;
   background-color: var(--color-bg);
 }
 
 .card {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.75rem;
   padding: 1rem;
+  max-height: calc(100dvh - 9rem);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
@@ -341,6 +365,36 @@ onUnmounted(() => {
 
 .card h2 {
   margin: 0;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.theme-control {
+  color: var(--color-text-muted);
+}
+
+.theme-row select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.35rem;
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .card-content {
@@ -458,7 +512,8 @@ button:disabled {
 
 .table-wrap {
   overflow: auto;
-  max-height: calc(100vh - 14rem);
+  min-height: 0;
+  max-height: none;
   border: 1px solid var(--color-border);
   border-radius: 0.4rem;
 }
