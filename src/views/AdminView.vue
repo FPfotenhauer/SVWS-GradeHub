@@ -41,8 +41,8 @@ const nurAktive = ref<boolean>(true)
 type SpaltenKey = 'kuerzel' | 'name' | 'passwort'
 
 const spaltenBreiten = ref<Record<SpaltenKey, number>>({
-  kuerzel: 72,
-  name: 190,
+  kuerzel: 96,
+  name: 240,
   passwort: 260,
 })
 
@@ -559,6 +559,13 @@ async function fuehreLabenDurch(): Promise<void> {
 
 function spaltenStil(key: SpaltenKey): { width: string; minWidth: string } {
   const breite = spaltenBreiten.value[key]
+  if (key === 'passwort') {
+    return {
+      width: 'auto',
+      minWidth: `${breite}px`,
+    }
+  }
+
   return {
     width: `${breite}px`,
     minWidth: `${breite}px`,
@@ -1057,7 +1064,8 @@ button:disabled {
 }
 
 table {
-  width: max-content;
+  width: 100%;
+  min-width: max-content;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.9rem;
