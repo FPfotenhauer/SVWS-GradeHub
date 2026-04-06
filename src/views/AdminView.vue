@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { strToU8, zipSync } from 'fflate'
 import { useAuthStore } from '@/stores/authStore'
 import { useUIStore } from '@/stores/uiStore'
 
@@ -245,7 +246,7 @@ async function fuehreSchluesselGenerierungDurch(): Promise<void> {
 }
 
 function erzeugeeDateien(): void {
-  // TODO: Dateien erzeugen
+  void erzeugeDateienFuerAuswahl()
 }
 
 // --- AES-256-GCM Crypto-Hilfsfunktionen (ADR-0005) ---
@@ -288,6 +289,152 @@ async function aesEntschluesseln(encryptedJson: string, password: string): Promi
   const key = await leitenSchluesselAb(password, saltBuf)
   const plainBuf = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBuf }, key, cipherBuf)
   return new TextDecoder().decode(plainBuf)
+}
+
+function arrayBufferNachBase64(buffer: ArrayBuffer): string {
+  return window.btoa(String.fromCharCode(...new Uint8Array(buffer)))
+}
+
+function base64NachArrayBuffer(value: string): ArrayBuffer {
+  return Uint8Array.from(window.atob(value), (c) => c.charCodeAt(0)).buffer.slice(0) as ArrayBuffer
+}
+
+async function aesVerschluesselnBytes(plaintext: ArrayBuffer, password: string, originalDateiname: string): Promise<string> {
+  const saltBuf = window.crypto.getRandomValues(new Uint8Array(16)).buffer.slice(0) as ArrayBuffer
+  const ivBuf = window.crypto.getRandomValues(new Uint8Array(12)).buffer.slice(0) as ArrayBuffer
+  const key = await leitenSchluesselAb(password, saltBuf)
+  const cipherBuf = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBuf }, key, plaintext)
+  return JSON.stringify({
+    format: 'gradehub-encrypted-zip',
+    version: 1,
+    originalFileName: originalDateiname,
+    salt: arrayBufferNachBase64(saltBuf),
+    iv: arrayBufferNachBase64(ivBuf),
+    ciphertext: arrayBufferNachBase64(cipherBuf),
+  })
+}
+
+function arrayBufferAusUint8Array(value: Uint8Array): ArrayBuffer {
+  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
+}
+
+async function ladeENMJsonFuerLehrer(lehrerId: number): Promise<string> {
+  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
+  const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/enm/v2/lehrer/${lehrerId}`
+  let response: Response
+
+  try {
+    response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: encodeBasicAuth(authStore.username, authStore.password),
+        Accept: 'application/json',
+      },
+    })
+  } catch {
+    throw new Error(`Netzwerkfehler beim Zugriff auf ${endpoint}. Bitte URL, Protokoll und CORS pruefen.`)
+  }
+
+  if (!response.ok) {
+    throw new Error(`ENM für Lehrkraft ${lehrerId} konnte nicht geladen werden (${response.status}).`)
+  }
+
+  const text = await response.text()
+  try {
+    const parsed = JSON.parse(text) as unknown
+    return JSON.stringify(parsed, null, 2)
+  } catch {
+    throw new Error(`Antwort fuer Lehrkraft ${lehrerId} ist kein gueltiges JSON.`)
+  }
+}
+
+type DirectoryPickerResult = {
+  directoryHandle: FileSystemDirectoryHandle | null
+  cancelled: boolean
+}
+
+async function waehleAusgabeOrdner(): Promise<DirectoryPickerResult> {
+  const pickerWindow = window as Window & {
+    showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
+  }
+
+  if (typeof pickerWindow.showDirectoryPicker !== 'function') {
+    return { directoryHandle: null, cancelled: false }
+  }
+
+  try {
+    const directoryHandle = await pickerWindow.showDirectoryPicker()
+    return { directoryHandle, cancelled: false }
+  } catch {
+    return { directoryHandle: null, cancelled: true }
+  }
+}
+
+async function speichereDatei(dateiname: string, inhalt: string, directoryHandle: FileSystemDirectoryHandle | null): Promise<void> {
+  if (directoryHandle) {
+    const fileHandle = await directoryHandle.getFileHandle(dateiname, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(inhalt)
+    await writable.close()
+    return
+  }
+
+  const blob = new Blob([inhalt], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = dateiname
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function erzeugeDateienFuerAuswahl(): Promise<void> {
+  errorMessage.value = ''
+
+  if (ausgewaehlt.value.size === 0) {
+    errorMessage.value = 'Bitte mindestens eine Lehrkraft auswählen.'
+    return
+  }
+
+  if (!oeffentlicherSchluesselPem.value) {
+    errorMessage.value = 'Bitte zuerst ein Schlüsselpaar erzeugen (öffentlicher Schlüssel fehlt).'
+    return
+  }
+
+  const ausgewaehlteLehrer = lehrer.value.filter((eintrag) => ausgewaehlt.value.has(eintrag.id))
+  const ohneNotenpasswort = ausgewaehlteLehrer.filter((eintrag) => eintrag.notenpasswort.trim() === '')
+  if (ohneNotenpasswort.length > 0) {
+    errorMessage.value = `Für folgende Lehrkräfte fehlt ein Notenpasswort: ${ohneNotenpasswort.map((l) => l.kuerzel).join(', ')}`
+    return
+  }
+
+  isLoading.value = true
+  try {
+    const { directoryHandle, cancelled } = await waehleAusgabeOrdner()
+    if (cancelled) {
+      return
+    }
+
+    for (const eintrag of ausgewaehlteLehrer) {
+      const enmJson = await ladeENMJsonFuerLehrer(eintrag.id)
+      const zipBytes = zipSync({
+        'enm.json': strToU8(enmJson),
+        'public_key.pem': strToU8(oeffentlicherSchluesselPem.value),
+      })
+
+      const zipFileName = `${eintrag.kuerzel || `lehrer-${eintrag.id}`}-enm.zip`
+      const verschluesselt = await aesVerschluesselnBytes(
+        arrayBufferAusUint8Array(zipBytes),
+        eintrag.notenpasswort,
+        zipFileName,
+      )
+      await speichereDatei(`${zipFileName}.enc.json`, verschluesselt, directoryHandle)
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Dateien konnten nicht erzeugt werden.'
+  } finally {
+    isLoading.value = false
+  }
 }
 
 // --- Speichern-Modal ---
