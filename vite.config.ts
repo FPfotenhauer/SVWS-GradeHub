@@ -15,7 +15,7 @@ export default defineConfig({
           return html
             .replace(
               /<script[^>]*src="\.\/assets\/app\.js"[^>]*><\/script>/,
-              '<script defer src="./assets/app.js"></script>',
+              '<script type="module" src="./assets/app.js"></script>',
             )
             .replace(
               /<link\s+rel="stylesheet"\s+crossorigin\s+href="\.\/assets\/app\.css">/,
