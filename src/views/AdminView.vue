@@ -142,6 +142,30 @@ function toggleAuswahl(id: number): void {
   }
 }
 
+async function kopiereNotenpasswort(passwort: string): Promise<void> {
+  if (passwort.trim() === '') return
+  errorMessage.value = ''
+
+  try {
+    await window.navigator.clipboard.writeText(passwort)
+  } catch {
+    const fallbackInput = document.createElement('textarea')
+    fallbackInput.value = passwort
+    fallbackInput.setAttribute('readonly', '')
+    fallbackInput.style.position = 'fixed'
+    fallbackInput.style.left = '-9999px'
+    document.body.appendChild(fallbackInput)
+    fallbackInput.select()
+
+    const ok = document.execCommand('copy')
+    document.body.removeChild(fallbackInput)
+
+    if (!ok) {
+      errorMessage.value = 'Notenpasswort konnte nicht in die Zwischenablage kopiert werden.'
+    }
+  }
+}
+
 onMounted(() => {
   ladeLehrerListe()
 })
@@ -734,7 +758,21 @@ onUnmounted(() => {
               </td>
               <td class="col-kuerzel">{{ l.kuerzel }}</td>
               <td class="col-name">{{ l.nachname }}, {{ l.vorname }}</td>
-              <td class="col-passwort">{{ l.notenpasswort || '-' }}</td>
+              <td class="col-passwort">
+                <div class="col-passwort-inhalt">
+                  <span class="passwort-text">{{ l.notenpasswort || '-' }}</span>
+                  <button
+                    v-if="l.notenpasswort"
+                    class="copy-passwort-btn"
+                    type="button"
+                    title="Notenpasswort kopieren"
+                    aria-label="Notenpasswort kopieren"
+                    @click.stop="kopiereNotenpasswort(l.notenpasswort)"
+                  >
+                    ⎘
+                  </button>
+                </div>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -1188,6 +1226,42 @@ td.col-check input[type='checkbox'] {
 .col-passwort {
   text-align: left;
   font-family: 'Noto Sans Mono', 'Courier New', monospace;
+}
+
+.col-passwort-inhalt {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.passwort-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-passwort-btn {
+  flex: 0 0 auto;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.92rem;
+  line-height: 1;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+}
+
+.copy-passwort-btn:hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary) 9%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 28%, var(--color-border));
 }
 
 .error {
