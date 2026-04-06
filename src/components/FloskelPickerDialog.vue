@@ -300,10 +300,6 @@ function schliessen(): void {
               Allgemeine Floskeln und passende Bereichs-Floskeln stehen gemeinsam zur Auswahl. Doppelklick fügt den Text ein.
             </p>
           </div>
-
-          <button class="floskel-close" type="button" aria-label="Floskelauswahl schliessen" @click="schliessen">
-            Schliessen
-          </button>
         </header>
 
         <div class="floskel-toolbar">
@@ -505,7 +501,6 @@ function schliessen(): void {
   color: var(--color-text-muted);
 }
 
-.floskel-close,
 .floskel-footer button,
 .floskel-chip {
   border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
@@ -519,7 +514,6 @@ function schliessen(): void {
   border-radius: 999px;
 }
 
-.floskel-close,
 .floskel-footer button {
   border-radius: 6px;
   align-self: flex-start;
@@ -529,7 +523,6 @@ function schliessen(): void {
   line-height: 1.2;
 }
 
-.floskel-close:hover,
 .floskel-footer button:hover,
 .floskel-chip:hover {
   border-color: var(--color-primary);
@@ -825,7 +818,7 @@ function schliessen(): void {
   }
 
   .floskel-footer button,
-  .floskel-close {
+  .floskel-footer button {
     width: 100%;
     justify-content: center;
   }

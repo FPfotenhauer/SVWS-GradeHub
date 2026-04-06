@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { unzipSync, strFromU8 } from 'fflate'
 
 import { useAuthStore } from '@/stores/authStore'
 import { useENMStore } from '@/stores/enmStore'
@@ -54,13 +55,120 @@ const password = ref<string>(initialValue(authStore.password, envString('VITE_SV
 const isLoading = ref<boolean>(false)
 const statusMessage = ref<string>('')
 const errorMessage = ref<string>('')
+const ausgewaehlteDatei = ref<File | null>(null)
 const lehrerListe = ref<LehrerKurzinfo[]>([])
 const selectedLehrerId = ref<number | null>(null)
 const serverCardOpen = ref<boolean>(true)
 const fileCardOpen = ref<boolean>(true)
 
+type EncryptedZipPayload = {
+  format: 'gradehub-encrypted-zip'
+  version: number
+  originalFileName: string
+  salt: string
+  iv: string
+  ciphertext: string
+}
+
+const entschluesselnModalOffen = ref<boolean>(false)
+const entschluesselnKennwort = ref<string>('')
+const entschluesselnFehler = ref<string>('')
+const entschluesselnLaeuft = ref<boolean>(false)
+const ausstehendeVerschluesselteDatei = ref<{ name: string; content: string } | null>(null)
+
 function encodeBasicAuth(user: string, pass: string): string {
   return `Basic ${window.btoa(`${user}:${pass}`)}`
+}
+
+function base64NachArrayBuffer(value: string): ArrayBuffer {
+  return Uint8Array.from(window.atob(value), (c) => c.charCodeAt(0)).buffer.slice(0) as ArrayBuffer
+}
+
+async function leitenSchluesselAb(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
+  const keyMaterial = await window.crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  )
+
+  return window.crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 310_000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt'],
+  )
+}
+
+function istEncryptedZipPayload(value: unknown): value is EncryptedZipPayload {
+  if (typeof value !== 'object' || value === null) return false
+  const rec = value as Record<string, unknown>
+  return rec.format === 'gradehub-encrypted-zip'
+    && typeof rec.version === 'number'
+    && typeof rec.originalFileName === 'string'
+    && typeof rec.salt === 'string'
+    && typeof rec.iv === 'string'
+    && typeof rec.ciphertext === 'string'
+}
+
+function schliesseEntschluesselnModal(): void {
+  entschluesselnModalOffen.value = false
+  entschluesselnKennwort.value = ''
+  entschluesselnFehler.value = ''
+  ausstehendeVerschluesselteDatei.value = null
+}
+
+async function ladeVerschluesselteDateiMitKennwort(): Promise<void> {
+  if (!ausstehendeVerschluesselteDatei.value) {
+    entschluesselnFehler.value = 'Es wurde keine Datei ausgewählt.'
+    return
+  }
+
+  if (entschluesselnKennwort.value.trim() === '') {
+    entschluesselnFehler.value = 'Bitte ein Kennwort eingeben.'
+    return
+  }
+
+  entschluesselnFehler.value = ''
+  entschluesselnLaeuft.value = true
+  isLoading.value = true
+
+  try {
+    const parsed = JSON.parse(ausstehendeVerschluesselteDatei.value.content) as unknown
+    if (!istEncryptedZipPayload(parsed)) {
+      throw new Error('Dateiformat wird nicht unterstützt.')
+    }
+
+    const salt = base64NachArrayBuffer(parsed.salt)
+    const iv = base64NachArrayBuffer(parsed.iv)
+    const ciphertext = base64NachArrayBuffer(parsed.ciphertext)
+    const key = await leitenSchluesselAb(entschluesselnKennwort.value, salt)
+    const plainZip = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+
+    const zipEntries = unzipSync(new Uint8Array(plainZip))
+    const enmBytes = zipEntries['enm.json']
+    if (!enmBytes) {
+      throw new Error('Die entschlüsselte ZIP enthält keine enm.json.')
+    }
+
+    const enmText = strFromU8(enmBytes)
+    const enmBlob = new Blob([enmText], { type: 'application/json' })
+    const enmFile = new File([enmBlob], 'enm.json', { type: 'application/json' })
+    await enmStore.ladeENMVonDatei(enmFile)
+
+    statusMessage.value = `Verschlüsselte Datei geladen: ${ausstehendeVerschluesselteDatei.value.name}`
+    schliesseEntschluesselnModal()
+    await router.push('/lerngruppen')
+  } catch (error) {
+    entschluesselnFehler.value = error instanceof Error
+      ? error.message
+      : 'Entschlüsselung fehlgeschlagen. Bitte Kennwort und Datei prüfen.'
+  } finally {
+    entschluesselnLaeuft.value = false
+    isLoading.value = false
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -180,49 +288,61 @@ async function ladeLehrerListe(): Promise<void> {
   }
 }
 
-async function ladeVonDatei(event: Event): Promise<void> {
+async function verarbeiteDatei(file: File): Promise<void> {
   clearMessages()
+
+  try {
+    if (file.name.endsWith('.enc.json')) {
+      const encryptedContent = await file.text()
+      ausstehendeVerschluesselteDatei.value = {
+        name: file.name,
+        content: encryptedContent,
+      }
+      entschluesselnKennwort.value = ''
+      entschluesselnFehler.value = ''
+      entschluesselnModalOffen.value = true
+      return
+    }
+
+    await enmStore.ladeENMVonDatei(file)
+    statusMessage.value = `ENM-Datei geladen: ${file.name}`
+    await router.push('/lerngruppen')
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : 'Datei konnte nicht verarbeitet werden.'
+  }
+}
+
+function onDateiAusgewaehlt(event: Event): void {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+  const file = input.files?.[0] ?? null
+  ausgewaehlteDatei.value = file
 
   if (!file) {
+    clearMessages()
+  }
+}
+
+async function ladeVonDatei(): Promise<void> {
+  clearMessages()
+  const file = ausgewaehlteDatei.value
+
+  if (!file) {
+    errorMessage.value = 'Bitte zuerst eine Datei auswählen.'
     return
   }
 
   isLoading.value = true
 
   try {
-    await enmStore.ladeENMVonDatei(file)
-    statusMessage.value = `ENM-Datei geladen: ${file.name}`
-    await router.push('/lerngruppen')
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Datei konnte nicht verarbeitet werden.'
+    await verarbeiteDatei(file)
   } finally {
     isLoading.value = false
-    input.value = ''
   }
 }
 
-async function ladeLehrerdateiAusData(): Promise<void> {
-  clearMessages()
-  isLoading.value = true
-
-  try {
-    const response = await fetch('/data/enm.teacher.json')
-    if (!response.ok) {
-      throw new Error(`Lehrerdatei nicht gefunden (${response.status}).`)
-    }
-
-    const blob = await response.blob()
-    const file = new File([blob], 'enm.teacher.json', { type: 'application/json' })
-    await enmStore.ladeENMVonDatei(file)
-    statusMessage.value = 'Lehrerdatei aus data/enm.teacher.json wurde geladen.'
-    await router.push('/lerngruppen')
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Lehrerdatei konnte nicht geladen werden.'
-  } finally {
-    isLoading.value = false
-  }
+function oeffneAdmin(): void {
+  authStore.setCredentials(baseUrl.value, schema.value, username.value, password.value)
+  router.push('/admin')
 }
 
 // Naechster Schritt: Versionspruefung fuer ENM-v2/v1 bereits beim Verbindungsdialog anzeigen.
@@ -257,6 +377,7 @@ async function ladeLehrerdateiAusData(): Promise<void> {
         </label>
         <div class="button-row">
           <button :disabled="isLoading" type="button" @click="ladeLehrerListe">Lehrerliste laden</button>
+          <button class="secondary" type="button" @click="oeffneAdmin">Adminbereich</button>
         </div>
 
         <label v-if="lehrerListe.length > 0">
@@ -287,13 +408,40 @@ async function ladeLehrerdateiAusData(): Promise<void> {
       </button>
 
       <div v-if="fileCardOpen" class="card-content">
-        <input :disabled="isLoading" type="file" accept=".json,.gz,.json.gz" @change="ladeVonDatei" />
-        <button :disabled="isLoading" type="button" @click="ladeLehrerdateiAusData">
+        <input :disabled="isLoading" type="file" accept=".json,.gz,.json.gz,.enc.json" @change="onDateiAusgewaehlt" />
+        <button :disabled="isLoading || !ausgewaehlteDatei" type="button" @click="ladeVonDatei">
           Lehrerdatei laden
         </button>
-        <p class="help">Unterstuetzt werden ENM-JSON sowie gzip-komprimierte ENM-Dateien.</p>
+        <p class="help">Unterstuetzt werden ENM-JSON, gzip-komprimierte ENM-Dateien sowie verschlüsselte Dateien (.enc.json).</p>
       </div>
     </section>
+
+    <div v-if="entschluesselnModalOffen" class="modal-backdrop" @click.self="schliesseEntschluesselnModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="entschluesseln-modal-title">
+        <div class="modal-header">
+          <h2 id="entschluesseln-modal-title">Verschlüsselte Datei laden</h2>
+          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseEntschluesselnModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="help">Bitte Kennwort eingeben, um die ausgewählte Datei zu entschlüsseln.</p>
+          <p v-if="entschluesselnFehler" class="error">{{ entschluesselnFehler }}</p>
+          <label for="entschluesseln-passwort">Kennwort</label>
+          <input
+            id="entschluesseln-passwort"
+            v-model="entschluesselnKennwort"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Notenpasswort"
+          />
+        </div>
+        <div class="modal-footer">
+          <button class="secondary" type="button" @click="schliesseEntschluesselnModal">Abbrechen</button>
+          <button :disabled="entschluesselnLaeuft" type="button" @click="ladeVerschluesselteDateiMitKennwort">
+            {{ entschluesselnLaeuft ? 'Entschlüsseln…' : 'Entschlüsseln & laden' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <p v-if="statusMessage" class="status">{{ statusMessage }}</p>
     <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
@@ -387,6 +535,12 @@ button:disabled {
   cursor: not-allowed;
 }
 
+button.secondary {
+  color: #dc2626;
+  background: transparent;
+  border: 1px solid #dc2626;
+}
+
 .help {
   margin: 0;
   color: var(--color-text-muted);
@@ -407,5 +561,65 @@ button:disabled {
 .error {
   background: var(--color-error-bg);
   border: 1px solid var(--color-error-border);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 3rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+}
+
+.modal-close {
+  font: inherit;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.3rem;
+}
+
+.modal-close:hover {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.modal-body {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--color-border);
 }
 </style>
