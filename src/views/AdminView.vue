@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { strToU8, zipSync } from 'fflate'
+import { jsPDF } from 'jspdf'
 import { useAuthStore } from '@/stores/authStore'
 import { useUIStore } from '@/stores/uiStore'
 
@@ -214,6 +215,85 @@ function generierePasswoerterFuerAuswahl(): void {
       notenpasswort: generiereNotenpasswort(),
     }
   })
+}
+
+function druckePasswortStreifen(): void {
+  errorMessage.value = ''
+
+  const daten = sichtbareLehrer.value.filter((l) => ausgewaehlt.value.has(l.id))
+  if (daten.length === 0) {
+    errorMessage.value = 'Bitte mindestens eine Lehrkraft auswählen, um die Passwortstreifen zu drucken.'
+    return
+  }
+
+  const streifen = daten
+    .map((l) => {
+      const name = `${l.nachname}, ${l.vorname}`
+      return {
+        kuerzel: l.kuerzel,
+        name,
+        passwort: l.notenpasswort.trim() !== '' ? l.notenpasswort : '-',
+      }
+    })
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  })
+
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const marginX = 12
+  const marginTop = 12
+  const marginBottom = 12
+  const stripHeight = 18
+  const right = pageWidth - marginX
+  const contentWidth = pageWidth - (2 * marginX)
+
+  let y = marginTop
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(14)
+  doc.text('Notenpasswoerter je Lehrkraft', marginX, y)
+  y += 8
+
+  for (const eintrag of streifen) {
+    if (y + stripHeight > pageHeight - marginBottom) {
+      doc.addPage()
+      y = marginTop
+    }
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('Kuerzel:', marginX, y + 3.5)
+    doc.text('Name:', marginX + 34, y + 3.5)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(doc.splitTextToSize(eintrag.kuerzel, 24), marginX + 13, y + 3.5)
+    doc.text(doc.splitTextToSize(eintrag.name, contentWidth - 48), marginX + 44, y + 3.5)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.text('Notenpasswort:', marginX, y + 10.5)
+
+    doc.setFont('courier', 'bold')
+    doc.setFontSize(12)
+    doc.text(eintrag.passwort, marginX + 24, y + 10.7)
+
+    doc.setDrawColor(107, 114, 128)
+    doc.setLineWidth(0.2)
+    doc.setLineDashPattern([1.2, 1.2], 0)
+    doc.line(marginX, y + stripHeight - 1.1, right, y + stripHeight - 1.1)
+    doc.setLineDashPattern([], 0)
+
+    y += stripHeight
+  }
+
+  const jetzt = new Date()
+  const stempel = `${jetzt.getFullYear()}-${String(jetzt.getMonth() + 1).padStart(2, '0')}-${String(jetzt.getDate()).padStart(2, '0')}`
+  doc.save(`notenpasswoerter-${stempel}.pdf`)
 }
 
 // --- Schlüssel-Modal ---
@@ -688,6 +768,14 @@ onUnmounted(() => {
             @click="laden"
           >
             Laden
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            :disabled="ausgewaehlt.size === 0"
+            @click="druckePasswortStreifen"
+          >
+            Drucken (Auswahl)
           </button>
         </div>
         <div class="table-header-actions">
