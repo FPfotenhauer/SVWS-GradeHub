@@ -248,12 +248,166 @@ function erzeugeeDateien(): void {
   // TODO: Dateien erzeugen
 }
 
-function speichern(): void {
-  // TODO: Konfiguration speichern
+// --- AES-256-GCM Crypto-Hilfsfunktionen (ADR-0005) ---
+
+async function leitenSchluesselAb(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
+  const enc = new TextEncoder()
+  const keyMaterial = await window.crypto.subtle.importKey(
+    'raw',
+    enc.encode(password),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  )
+  return window.crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 310_000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  )
 }
 
+async function aesVerschluesseln(plaintext: string, password: string): Promise<string> {
+  const enc = new TextEncoder()
+  const saltBuf = window.crypto.getRandomValues(new Uint8Array(16)).buffer.slice(0) as ArrayBuffer
+  const ivBuf = window.crypto.getRandomValues(new Uint8Array(12)).buffer.slice(0) as ArrayBuffer
+  const key = await leitenSchluesselAb(password, saltBuf)
+  const cipherBuf = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBuf }, key, enc.encode(plaintext))
+  const toB64 = (buf: ArrayBuffer): string => window.btoa(String.fromCharCode(...new Uint8Array(buf)))
+  return JSON.stringify({ version: 1, salt: toB64(saltBuf), iv: toB64(ivBuf), ciphertext: toB64(cipherBuf) })
+}
+
+async function aesEntschluesseln(encryptedJson: string, password: string): Promise<string> {
+  const parsed = JSON.parse(encryptedJson) as { version: number; salt: string; iv: string; ciphertext: string }
+  const fromB64 = (s: string): ArrayBuffer =>
+    Uint8Array.from(window.atob(s), (c) => c.charCodeAt(0)).buffer.slice(0) as ArrayBuffer
+  const saltBuf = fromB64(parsed.salt)
+  const ivBuf = fromB64(parsed.iv)
+  const cipherBuf = fromB64(parsed.ciphertext)
+  const key = await leitenSchluesselAb(password, saltBuf)
+  const plainBuf = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBuf }, key, cipherBuf)
+  return new TextDecoder().decode(plainBuf)
+}
+
+// --- Speichern-Modal ---
+const speichernModalOffen = ref<boolean>(false)
+const speichernKennwort = ref<string>('')
+const speichernKennwortBestaetigung = ref<string>('')
+const speichernFehler = ref<string>('')
+const speichernLaeuft = ref<boolean>(false)
+
+function speichern(): void {
+  speichernKennwort.value = ''
+  speichernKennwortBestaetigung.value = ''
+  speichernFehler.value = ''
+  speichernModalOffen.value = true
+}
+
+function schliesseSpeichernModal(): void {
+  speichernModalOffen.value = false
+}
+
+async function fuehreSpeichernDurch(): Promise<void> {
+  if (speichernKennwort.value.length < 8) {
+    speichernFehler.value = 'Das Kennwort muss mindestens 8 Zeichen lang sein.'
+    return
+  }
+  if (speichernKennwort.value !== speichernKennwortBestaetigung.value) {
+    speichernFehler.value = 'Die Kennwörter stimmen nicht überein.'
+    return
+  }
+  speichernFehler.value = ''
+  speichernLaeuft.value = true
+  try {
+    const daten = {
+      schluessel: {
+        oeffentlich: oeffentlicherSchluesselPem.value || null,
+        privat: privaterSchluesselPem.value || null,
+      },
+      lehrer: lehrer.value.map((l) => ({ id: l.id, kuerzel: l.kuerzel, notenpasswort: l.notenpasswort })),
+    }
+    const encrypted = await aesVerschluesseln(JSON.stringify(daten, null, 2), speichernKennwort.value)
+    const blob = new Blob([encrypted], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'gradehub-config.ghb'
+    a.click()
+    URL.revokeObjectURL(url)
+    speichernModalOffen.value = false
+  } catch (error) {
+    speichernFehler.value = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.'
+  } finally {
+    speichernLaeuft.value = false
+  }
+}
+
+// --- Laden-Modal ---
+const ladenModalOffen = ref<boolean>(false)
+const ladenKennwort = ref<string>('')
+const ladenFehler = ref<string>('')
+const ladenLaeuft = ref<boolean>(false)
+const ladenDateiName = ref<string>('')
+const ladenDateiText = ref<string>('')
+
 function laden(): void {
-  // TODO: Konfiguration laden
+  ladenKennwort.value = ''
+  ladenFehler.value = ''
+  ladenDateiName.value = ''
+  ladenDateiText.value = ''
+  ladenModalOffen.value = true
+}
+
+function schliesseLabenModal(): void {
+  ladenModalOffen.value = false
+}
+
+function onLadenDateiGewaehlt(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  ladenDateiName.value = file.name
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    if (typeof e.target?.result === 'string') {
+      ladenDateiText.value = e.target.result
+    }
+  }
+  reader.readAsText(file)
+}
+
+async function fuehreLabenDurch(): Promise<void> {
+  if (!ladenDateiText.value) {
+    ladenFehler.value = 'Bitte eine Datei auswählen.'
+    return
+  }
+  if (!ladenKennwort.value) {
+    ladenFehler.value = 'Bitte das Kennwort eingeben.'
+    return
+  }
+  ladenFehler.value = ''
+  ladenLaeuft.value = true
+  try {
+    const plaintext = await aesEntschluesseln(ladenDateiText.value, ladenKennwort.value)
+    const daten = JSON.parse(plaintext) as {
+      schluessel: { oeffentlich: string | null; privat: string | null }
+      lehrer: { id: number; kuerzel: string; notenpasswort: string }[]
+    }
+    oeffentlicherSchluesselPem.value = daten.schluessel.oeffentlich ?? ''
+    privaterSchluesselPem.value = daten.schluessel.privat ?? ''
+    schluesselGeneriert.value = !!(daten.schluessel.oeffentlich && daten.schluessel.privat)
+    const passwortMap = new Map(daten.lehrer.map((l) => [l.id, l.notenpasswort]))
+    lehrer.value = lehrer.value.map((l) => ({
+      ...l,
+      notenpasswort: passwortMap.get(l.id) ?? l.notenpasswort,
+    }))
+    ladenModalOffen.value = false
+  } catch {
+    ladenFehler.value = 'Entschlüsselung fehlgeschlagen. Falsches Kennwort oder beschädigte Datei.'
+  } finally {
+    ladenLaeuft.value = false
+  }
 }
 
 function spaltenStil(key: SpaltenKey): { width: string; minWidth: string } {
@@ -483,6 +637,95 @@ onUnmounted(() => {
         </div>
         <div class="modal-footer">
           <button class="btn-generate" type="button" @click="schliesseSchluesselModal">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Speichern-Modal -->
+    <div v-if="speichernModalOffen" class="modal-backdrop" @click.self="schliesseSpeichernModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="speichern-modal-title">
+        <div class="modal-header">
+          <h2 id="speichern-modal-title">Konfiguration speichern</h2>
+          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSpeichernModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-meta">Die Daten werden mit AES-256-GCM verschlüsselt gespeichert.</p>
+          <p v-if="speichernFehler" class="error">{{ speichernFehler }}</p>
+          <label class="modal-form-label" for="speichern-pw">Kennwort</label>
+          <input
+            id="speichern-pw"
+            v-model="speichernKennwort"
+            class="modal-input"
+            type="password"
+            autocomplete="new-password"
+            placeholder="Mindestens 8 Zeichen"
+          />
+          <label class="modal-form-label" for="speichern-pw2">Kennwort bestätigen</label>
+          <input
+            id="speichern-pw2"
+            v-model="speichernKennwortBestaetigung"
+            class="modal-input"
+            type="password"
+            autocomplete="new-password"
+            placeholder="Kennwort wiederholen"
+          />
+        </div>
+        <div class="modal-footer">
+          <button class="btn-generate" type="button" @click="schliesseSpeichernModal">Abbrechen</button>
+          <button
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="speichernLaeuft"
+            @click="fuehreSpeichernDurch"
+          >
+            {{ speichernLaeuft ? 'Wird gespeichert…' : 'Speichern & herunterladen' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Laden-Modal -->
+    <div v-if="ladenModalOffen" class="modal-backdrop" @click.self="schliesseLabenModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="laden-modal-title">
+        <div class="modal-header">
+          <h2 id="laden-modal-title">Konfiguration laden</h2>
+          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseLabenModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-meta">Verschlüsselte GradeHub-Konfigurationsdatei (.ghb) auswählen.</p>
+          <p v-if="ladenFehler" class="error">{{ ladenFehler }}</p>
+          <label class="modal-form-label" for="laden-datei">Datei</label>
+          <div class="modal-file-row">
+            <label class="btn-generate modal-file-label" for="laden-datei">Datei wählen…</label>
+            <span class="modal-file-name">{{ ladenDateiName || 'Keine Datei ausgewählt' }}</span>
+          </div>
+          <input
+            id="laden-datei"
+            class="modal-file-input"
+            type="file"
+            accept=".ghb,application/json"
+            @change="onLadenDateiGewaehlt"
+          />
+          <label class="modal-form-label" for="laden-pw">Kennwort</label>
+          <input
+            id="laden-pw"
+            v-model="ladenKennwort"
+            class="modal-input"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Kennwort eingeben"
+          />
+        </div>
+        <div class="modal-footer">
+          <button class="btn-generate" type="button" @click="schliesseLabenModal">Abbrechen</button>
+          <button
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="ladenLaeuft"
+            @click="fuehreLabenDurch"
+          >
+            {{ ladenLaeuft ? 'Wird geladen…' : 'Laden' }}
+          </button>
         </div>
       </div>
     </div>
@@ -944,7 +1187,58 @@ td.col-check input[type='checkbox'] {
 .modal-footer {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding: 0.75rem 1.25rem;
   border-top: 1px solid var(--color-border);
+}
+
+.modal-form-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.modal-input {
+  font: inherit;
+  padding: 0.5rem 0.625rem;
+  width: 100%;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  box-sizing: border-box;
+  margin-bottom: 0.75rem;
+}
+
+.modal-input:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.modal-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.modal-file-label {
+  flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.modal-file-name {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-file-input {
+  display: none;
 }
 </style>
