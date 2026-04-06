@@ -191,6 +191,71 @@ function generierePasswoerterFuerAuswahl(): void {
   })
 }
 
+// --- Schlüssel-Modal ---
+const schluesselModalOffen = ref<boolean>(false)
+const schluesselGeneriert = ref<boolean>(false)
+const schluesselGenerierenLaeuft = ref<boolean>(false)
+const schluesselFehler = ref<string>('')
+const oeffentlicherSchluesselPem = ref<string>('')
+const privaterSchluesselPem = ref<string>('')
+const privaterSchluessel = ref<CryptoKey | null>(null)
+const oeffentlicherSchluessel = ref<CryptoKey | null>(null)
+
+function generiereSchluessel(): void {
+  schluesselFehler.value = ''
+  schluesselModalOffen.value = true
+}
+
+function schliesseSchluesselModal(): void {
+  schluesselModalOffen.value = false
+}
+
+async function fuehreSchluesselGenerierungDurch(): Promise<void> {
+  schluesselFehler.value = ''
+  schluesselGenerierenLaeuft.value = true
+  try {
+    const keyPair = await window.crypto.subtle.generateKey(
+      {
+        name: 'RSA-OAEP',
+        modulusLength: 4096,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256',
+      },
+      true,
+      ['encrypt', 'decrypt'],
+    )
+    oeffentlicherSchluessel.value = keyPair.publicKey
+    privaterSchluessel.value = keyPair.privateKey
+    const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey)
+    const pubB64 = window.btoa(String.fromCharCode(...new Uint8Array(spki)))
+    const pubLines = pubB64.match(/.{1,64}/g)?.join('\n') ?? pubB64
+    oeffentlicherSchluesselPem.value = `-----BEGIN PUBLIC KEY-----\n${pubLines}\n-----END PUBLIC KEY-----`
+
+    const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey)
+    const privB64 = window.btoa(String.fromCharCode(...new Uint8Array(pkcs8)))
+    const privLines = privB64.match(/.{1,64}/g)?.join('\n') ?? privB64
+    privaterSchluesselPem.value = `-----BEGIN PRIVATE KEY-----\n${privLines}\n-----END PRIVATE KEY-----`
+
+    schluesselGeneriert.value = true
+  } catch (error) {
+    schluesselFehler.value = error instanceof Error ? error.message : 'Schlüsselerzeugung fehlgeschlagen.'
+  } finally {
+    schluesselGenerierenLaeuft.value = false
+  }
+}
+
+function erzeugeeDateien(): void {
+  // TODO: Dateien erzeugen
+}
+
+function speichern(): void {
+  // TODO: Konfiguration speichern
+}
+
+function laden(): void {
+  // TODO: Konfiguration laden
+}
+
 function spaltenStil(key: SpaltenKey): { width: string; minWidth: string } {
   const breite = spaltenBreiten.value[key]
   return {
@@ -262,6 +327,35 @@ onUnmounted(() => {
             @click="generierePasswoerterFuerAuswahl"
           >
             Passwörter generieren
+          </button>
+          <button
+            class="btn-generate"
+            :class="{ 'btn-generate--aktiv': schluesselGeneriert }"
+            type="button"
+            @click="generiereSchluessel"
+          >
+            Schlüssel generieren
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="erzeugeeDateien"
+          >
+            Dateien erzeugen
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="speichern"
+          >
+            Speichern
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="laden"
+          >
+            Laden
           </button>
         </div>
         <div class="table-header-actions">
@@ -338,6 +432,60 @@ onUnmounted(() => {
         </table>
       </div>
     </section>
+
+    <!-- Schlüssel-Modal -->
+    <div v-if="schluesselModalOffen" class="modal-backdrop" @click.self="schliesseSchluesselModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="schluessel-modal-title">
+        <div class="modal-header">
+          <h2 id="schluessel-modal-title">Schlüsselpaar generieren</h2>
+          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSchluesselModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-meta">Algorithmus: RSA-OAEP · SHA-256 · 4096 Bit</p>
+
+          <p v-if="schluesselFehler" class="error">{{ schluesselFehler }}</p>
+
+          <div v-if="!schluesselGeneriert" class="modal-action-row">
+            <button
+              class="btn-generate"
+              type="button"
+              :disabled="schluesselGenerierenLaeuft"
+              @click="fuehreSchluesselGenerierungDurch"
+            >
+              {{ schluesselGenerierenLaeuft ? 'Wird erzeugt…' : 'Schlüsselpaar erzeugen' }}
+            </button>
+          </div>
+
+          <div v-else class="modal-success">
+            <span class="modal-success-icon">✓</span>
+            Schlüsselpaar wurde erfolgreich erzeugt.
+          </div>
+
+          <div v-if="oeffentlicherSchluesselPem" class="modal-key-block">
+            <label for="schluessel-pem-output" class="modal-key-label">Öffentlicher Schlüssel</label>
+            <textarea
+              id="schluessel-pem-output"
+              class="modal-key-textarea"
+              readonly
+              :value="oeffentlicherSchluesselPem"
+            />
+          </div>
+
+          <div v-if="privaterSchluesselPem" class="modal-key-block">
+            <label for="schluessel-priv-output" class="modal-key-label modal-key-label--privat">Privater Schlüssel <span class="modal-key-warn">(geheim halten!)</span></label>
+            <textarea
+              id="schluessel-priv-output"
+              class="modal-key-textarea"
+              readonly
+              :value="privaterSchluesselPem"
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-generate" type="button" @click="schliesseSchluesselModal">Schließen</button>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -655,5 +803,148 @@ td.col-check input[type='checkbox'] {
 
 .selection-info {
   display: none;
+}
+
+/* Schlüssel-Button aktiv (grün) */
+.btn-generate--aktiv {
+  color: #166534;
+  background: color-mix(in srgb, #16a34a 12%, var(--color-surface));
+  border-color: color-mix(in srgb, #16a34a 45%, var(--color-border));
+}
+
+.btn-generate--aktiv:hover:not(:disabled) {
+  background: color-mix(in srgb, #16a34a 20%, var(--color-surface));
+}
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(560px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 4rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.modal-close {
+  padding: 0.25rem 0.5rem;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  color: var(--color-text);
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+}
+
+.modal-meta {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.modal-action-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.modal-success {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.4rem;
+  font-size: 0.9rem;
+  color: #166534;
+  background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #16a34a 30%, transparent);
+}
+
+.modal-success-icon {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.modal-key-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.modal-key-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  display: block;
+}
+
+.modal-key-label--privat {
+  color: #b45309;
+}
+
+.modal-key-warn {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: #b45309;
+}
+
+.modal-key-textarea {
+  font: 0.78rem/1.5 'Noto Sans Mono', 'Courier New', monospace;
+  width: 100%;
+  height: 8rem;
+  resize: vertical;
+  padding: 0.5rem 0.6rem;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  box-sizing: border-box;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--color-border);
 }
 </style>
