@@ -55,6 +55,7 @@ const password = ref<string>(initialValue(authStore.password, envString('VITE_SV
 const isLoading = ref<boolean>(false)
 const statusMessage = ref<string>('')
 const errorMessage = ref<string>('')
+const ausgewaehlteDatei = ref<File | null>(null)
 const lehrerListe = ref<LehrerKurzinfo[]>([])
 const selectedLehrerId = ref<number | null>(null)
 const serverCardOpen = ref<boolean>(true)
@@ -287,16 +288,8 @@ async function ladeLehrerListe(): Promise<void> {
   }
 }
 
-async function ladeVonDatei(event: Event): Promise<void> {
+async function verarbeiteDatei(file: File): Promise<void> {
   clearMessages()
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-
-  if (!file) {
-    return
-  }
-
-  isLoading.value = true
 
   try {
     if (file.name.endsWith('.enc.json')) {
@@ -316,29 +309,32 @@ async function ladeVonDatei(event: Event): Promise<void> {
     await router.push('/lerngruppen')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Datei konnte nicht verarbeitet werden.'
-  } finally {
-    isLoading.value = false
-    input.value = ''
   }
 }
 
-async function ladeLehrerdateiAusData(): Promise<void> {
+function onDateiAusgewaehlt(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  ausgewaehlteDatei.value = file
+
+  if (!file) {
+    clearMessages()
+  }
+}
+
+async function ladeVonDatei(): Promise<void> {
   clearMessages()
+  const file = ausgewaehlteDatei.value
+
+  if (!file) {
+    errorMessage.value = 'Bitte zuerst eine Datei auswählen.'
+    return
+  }
+
   isLoading.value = true
 
   try {
-    const response = await fetch('/data/enm.teacher.json')
-    if (!response.ok) {
-      throw new Error(`Lehrerdatei nicht gefunden (${response.status}).`)
-    }
-
-    const blob = await response.blob()
-    const file = new File([blob], 'enm.teacher.json', { type: 'application/json' })
-    await enmStore.ladeENMVonDatei(file)
-    statusMessage.value = 'Lehrerdatei aus data/enm.teacher.json wurde geladen.'
-    await router.push('/lerngruppen')
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Lehrerdatei konnte nicht geladen werden.'
+    await verarbeiteDatei(file)
   } finally {
     isLoading.value = false
   }
@@ -412,8 +408,8 @@ function oeffneAdmin(): void {
       </button>
 
       <div v-if="fileCardOpen" class="card-content">
-        <input :disabled="isLoading" type="file" accept=".json,.gz,.json.gz,.enc.json" @change="ladeVonDatei" />
-        <button :disabled="isLoading" type="button" @click="ladeLehrerdateiAusData">
+        <input :disabled="isLoading" type="file" accept=".json,.gz,.json.gz,.enc.json" @change="onDateiAusgewaehlt" />
+        <button :disabled="isLoading || !ausgewaehlteDatei" type="button" @click="ladeVonDatei">
           Lehrerdatei laden
         </button>
         <p class="help">Unterstuetzt werden ENM-JSON, gzip-komprimierte ENM-Dateien sowie verschlüsselte Dateien (.enc.json).</p>
