@@ -8,6 +8,7 @@ import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { EnmExport, EnmLeistungsdaten } from '@/types/enm'
+import type { LeistungsChange } from '@/types/changes'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -180,6 +181,52 @@ function setLeistungsfeld(
   }
 }
 
+function setSchuelerfeld(
+  change: LeistungsChange,
+  schueler: EnmExport['schueler'][number],
+): void {
+  const ts = toSVWSTimestamp(change.geaendertAm)
+
+  if (change.feld === 'fehlstundenGesamt') {
+    schueler.lernabschnitt.fehlstundenGesamt = parseNumberValue(change.neuerWert)
+    schueler.lernabschnitt.tsFehlstundenGesamt = ts
+    return
+  }
+
+  if (change.feld === 'fehlstundenUnentschuldigt') {
+    schueler.lernabschnitt.fehlstundenGesamtUnentschuldigt = parseNumberValue(change.neuerWert)
+    schueler.lernabschnitt.tsFehlstundenGesamtUnentschuldigt = ts
+    return
+  }
+
+  if (change.feld === 'lernbereichArbeitslehre') {
+    schueler.lernabschnitt.lernbereich1note = change.neuerWert as EnmLeistungsdaten['note']
+    return
+  }
+
+  if (change.feld === 'lernbereichNaturwissenschaft') {
+    schueler.lernabschnitt.lernbereich2note = change.neuerWert as EnmLeistungsdaten['note']
+    return
+  }
+
+  if (change.feld === 'asv') {
+    schueler.bemerkungen.ASV = change.neuerWert
+    schueler.bemerkungen.tsASV = ts
+    return
+  }
+
+  if (change.feld === 'aue') {
+    schueler.bemerkungen.AUE = change.neuerWert
+    schueler.bemerkungen.tsAUE = ts
+    return
+  }
+
+  if (change.feld === 'zeugnisbemerkung') {
+    schueler.bemerkungen.ZB = change.neuerWert
+    schueler.bemerkungen.tsZB = ts
+  }
+}
+
 function buildRueckschreibeENM(): EnmExport {
   const source = enmDaten.value
   if (!source) {
@@ -188,14 +235,34 @@ function buildRueckschreibeENM(): EnmExport {
 
   const next = cloneENM(source)
   const leistungByKey = new Map<string, EnmLeistungsdaten>()
+  const schuelerById = new Map<number, EnmExport['schueler'][number]>()
 
   for (const schueler of next.schueler) {
+    schuelerById.set(schueler.id, schueler)
     for (const ld of schueler.leistungsdaten) {
       leistungByKey.set(`${schueler.id}:${ld.lerngruppenID}`, ld)
     }
   }
 
   for (const change of changeStore.changes.values()) {
+    const targetSchueler = schuelerById.get(change.schuelerId)
+
+    if (
+      targetSchueler
+      && (
+        change.feld === 'fehlstundenGesamt'
+        || change.feld === 'fehlstundenUnentschuldigt'
+        || change.feld === 'lernbereichArbeitslehre'
+        || change.feld === 'lernbereichNaturwissenschaft'
+        || change.feld === 'asv'
+        || change.feld === 'aue'
+        || change.feld === 'zeugnisbemerkung'
+      )
+    ) {
+      setSchuelerfeld(change, targetSchueler)
+      continue
+    }
+
     const key = `${change.schuelerId}:${change.lerngruppenId}`
     const ld = leistungByKey.get(key)
     if (!ld) {

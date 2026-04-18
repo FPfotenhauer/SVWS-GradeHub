@@ -205,10 +205,15 @@ function goSave(): void {
         <h2>Klassenleitung</h2>
         <p class="hinweis">
           {{ ownLehrerKuerzel || 'Lehrkraft' }} ist Klassenleitung in folgenden Klassen.
-          Hier werden spaeter spezielle Aufgaben fuer Klassenleitungen ergaenzt.
+          Ein Klick oeffnet die Klassenleitungs-Tabelle.
         </p>
         <div class="karten-grid">
-          <article v-for="klasse in klassenleiterKlassen" :key="klasse.id" class="karte">
+          <RouterLink
+            v-for="klasse in klassenleiterKlassen"
+            :key="klasse.id"
+            :to="{ name: 'klassenleitung', params: { klasseId: klasse.id } }"
+            class="karte link-karte"
+          >
             <header class="karte-kopf">
               <strong>{{ klasse.kuerzelAnzeige || klasse.kuerzel }}</strong>
               <span class="badge">
@@ -217,7 +222,7 @@ function goSave(): void {
             </header>
             <p class="meta">Schueler: {{ schuelerCountByKlasseId.get(klasse.id) ?? 0 }}</p>
             <p class="meta">Klasse-ID: {{ klasse.id }}</p>
-          </article>
+          </RouterLink>
         </div>
       </section>
     </template>
