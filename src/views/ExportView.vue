@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { strToU8, zipSync } from 'fflate'
 
 import { useAuthStore } from '@/stores/authStore'
 import { useChangeStore } from '@/stores/changeStore'
@@ -18,12 +19,24 @@ const enmDaten = computed(() => enmStore.enmDaten)
 const isLoaded = computed<boolean>(() => enmStore.isLoaded)
 const dataSource = computed<DataSource>(() => enmStore.dataSource)
 const sourceFileName = computed<string>(() => enmStore.sourceFileName ?? '')
+const encryptedSourceFileName = computed<string>(() => enmStore.encryptedSourceFileName ?? '')
+const encryptedOriginalFileName = computed<string>(() => enmStore.encryptedOriginalFileName ?? '')
+const encryptedSourcePassword = computed<string>(() => enmStore.encryptedSourcePassword ?? '')
 
 const isSaving = ref<boolean>(false)
 const statusMessage = ref<string>('')
 const errorMessage = ref<string>('')
 
 type DataSource = 'api' | 'file' | null
+
+type EncryptedZipPayload = {
+  format: 'gradehub-encrypted-zip'
+  version: number
+  originalFileName: string
+  salt: string
+  iv: string
+  ciphertext: string
+}
 
 const effectiveDataSource = computed<DataSource>(() => {
   if (dataSource.value === 'api' || dataSource.value === 'file') {
@@ -43,6 +56,7 @@ const effectiveDataSource = computed<DataSource>(() => {
 
 const dataSourceLabel = computed<string>(() => {
   if (effectiveDataSource.value === 'api') return 'SVWS-API'
+  if (isEncryptedFileSource.value) return 'Datei (verschluesselt)'
   if (effectiveDataSource.value === 'file') return 'Datei'
   return 'unbekannt'
 })
@@ -52,10 +66,37 @@ const canSaveToServer = computed<boolean>(() => {
 })
 
 const isFileSource = computed<boolean>(() => effectiveDataSource.value === 'file')
+const isEncryptedFileSource = computed<boolean>(() => {
+  return effectiveDataSource.value === 'file'
+    && encryptedSourcePassword.value.trim() !== ''
+    && encryptedOriginalFileName.value.trim() !== ''
+})
+const sourceDisplayName = computed<string>(() => {
+  if (isEncryptedFileSource.value && encryptedSourceFileName.value.trim() !== '') {
+    return encryptedSourceFileName.value
+  }
+  return sourceFileName.value
+})
 
 function clearMessages(): void {
   statusMessage.value = ''
   errorMessage.value = ''
+}
+
+function formatSaveError(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return 'Speichern wurde abgebrochen.'
+  }
+
+  if (error instanceof DOMException && error.name === 'OperationError') {
+    return 'Verschluesseltes Speichern fehlgeschlagen. Kennwort oder Dateiformat sind ungueltig.'
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return 'Speichern fehlgeschlagen.'
 }
 
 function cloneENM(data: unknown): EnmExport {
@@ -171,6 +212,83 @@ async function saveAsFile(content: EnmExport): Promise<void> {
   const filenameBase = (sourceFileName.value || 'enm.export.json').replace(/\.(gz|json)$/i, '')
   const suggestedName = `${filenameBase}.json`
 
+  await saveContentAsFile(json, suggestedName, 'ENM JSON', ['.json'])
+}
+
+function arrayBufferNachBase64(buffer: ArrayBuffer): string {
+  return window.btoa(String.fromCharCode(...new Uint8Array(buffer)))
+}
+
+function arrayBufferAusUint8Array(value: Uint8Array): ArrayBuffer {
+  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
+}
+
+async function leitenSchluesselAbFuerEncrypt(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
+  const keyMaterial = await window.crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  )
+
+  return window.crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 310_000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  )
+}
+
+async function baueEncryptedPayload(content: EnmExport): Promise<string> {
+  const normalizedPassword = encryptedSourcePassword.value.trim()
+
+  if (normalizedPassword === '') {
+    throw new Error('Verschluesselung fehlgeschlagen: Kennwort ist nicht verfuegbar.')
+  }
+
+  const enmJson = `${JSON.stringify(content, null, 2)}\n`
+  const zipBytes = zipSync({
+    'enm.json': strToU8(enmJson),
+  })
+
+  const plainZip = arrayBufferAusUint8Array(zipBytes)
+  const salt = window.crypto.getRandomValues(new Uint8Array(16)).buffer.slice(0) as ArrayBuffer
+  const iv = window.crypto.getRandomValues(new Uint8Array(12)).buffer.slice(0) as ArrayBuffer
+  const key = await leitenSchluesselAbFuerEncrypt(normalizedPassword, salt)
+  const ciphertext = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainZip)
+
+  const payload: EncryptedZipPayload = {
+    format: 'gradehub-encrypted-zip',
+    version: 1,
+    originalFileName: encryptedOriginalFileName.value,
+    salt: arrayBufferNachBase64(salt),
+    iv: arrayBufferNachBase64(iv),
+    ciphertext: arrayBufferNachBase64(ciphertext),
+  }
+
+  return `${JSON.stringify(payload, null, 2)}\n`
+}
+
+async function saveAsEncryptedFile(content: EnmExport): Promise<void> {
+  const encryptedJson = await baueEncryptedPayload(content)
+  const filenameBase = (sourceFileName.value || 'enm.export').replace(/\.(zip\.enc\.json|enc\.json|zip|gz|json)$/i, '')
+  const suggestedName = encryptedSourceFileName.value.trim() !== ''
+    ? encryptedSourceFileName.value
+    : `${filenameBase}.zip.enc.json`
+
+  await saveContentAsFile(encryptedJson, suggestedName, 'Verschluesselte ENM ZIP JSON', ['.enc.json'])
+}
+
+async function saveContentAsFile(
+  content: string,
+  suggestedName: string,
+  description: string,
+  extensions: string[],
+): Promise<void> {
+  const blob = new Blob([content], { type: 'application/json' })
+
   const picker = window as typeof window & {
     showSaveFilePicker?: (options: {
       suggestedName: string
@@ -188,18 +306,17 @@ async function saveAsFile(content: EnmExport): Promise<void> {
       suggestedName,
       types: [
         {
-          description: 'ENM JSON',
-          accept: { 'application/json': ['.json'] },
+          description,
+          accept: { 'application/json': extensions },
         },
       ],
     })
     const writable = await handle.createWritable()
-    await writable.write(new Blob([json], { type: 'application/json' }))
+    await writable.write(blob)
     await writable.close()
     return
   }
 
-  const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -250,7 +367,9 @@ async function onSave(): Promise<void> {
   const confirmation = window.confirm(
     effectiveDataSource.value === 'api'
       ? 'Änderungen jetzt an den SVWS-Server zurückschreiben?'
-      : 'Änderungen jetzt als ENM-Datei speichern?',
+      : isEncryptedFileSource.value
+        ? 'Aenderungen jetzt als verschluesselte ENM-Datei speichern?'
+        : 'Änderungen jetzt als ENM-Datei speichern?',
   )
 
   if (!confirmation) {
@@ -267,6 +386,9 @@ async function onSave(): Promise<void> {
       }
       await saveToServer(exportData)
       statusMessage.value = 'Änderungen wurden erfolgreich an den SVWS-Server übertragen.'
+    } else if (isEncryptedFileSource.value) {
+      await saveAsEncryptedFile(exportData)
+      statusMessage.value = 'Aenderungen wurden als verschluesselte ENM-Datei gespeichert.'
     } else {
       await saveAsFile(exportData)
       statusMessage.value = 'Änderungen wurden als ENM-Datei gespeichert.'
@@ -275,7 +397,7 @@ async function onSave(): Promise<void> {
     enmStore.ersetzeENMDaten(exportData)
     changeStore.reset()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.'
+    errorMessage.value = formatSaveError(error)
   } finally {
     isSaving.value = false
   }
@@ -300,12 +422,15 @@ function goBack(): void {
         <strong>{{ changeCount }}</strong>
       </p>
 
-      <p v-if="isFileSource && sourceFileName" class="source-hint">
-        Quelle: {{ sourceFileName }}
+      <p v-if="isFileSource && sourceDisplayName" class="source-hint">
+        Quelle: {{ sourceDisplayName }}
       </p>
 
       <p class="hint" v-if="effectiveDataSource === 'api'">
         Es wird ein Rückschreibe-Dialog für den SVWS-Server angeboten.
+      </p>
+      <p class="hint" v-else-if="isEncryptedFileSource">
+        Es wird eine verschluesselte ENM-Datei gespeichert.
       </p>
       <p class="hint" v-else-if="effectiveDataSource === 'file'">
         Es wird ein Dateispeicher-Dialog angeboten.
@@ -322,7 +447,11 @@ function goBack(): void {
           :disabled="isSaving || changeCount === 0"
           @click="onSave"
         >
-          {{ effectiveDataSource === 'api' ? 'Zum Server speichern' : 'Datei speichern' }}
+          {{ effectiveDataSource === 'api'
+            ? 'Zum Server speichern'
+            : isEncryptedFileSource
+              ? 'Verschluesselte Datei speichern'
+              : 'Datei speichern' }}
         </button>
       </div>
     </section>
