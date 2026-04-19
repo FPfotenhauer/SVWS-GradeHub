@@ -40,6 +40,7 @@ const route = useRoute()
 const router = useRouter()
 const enmStore = useENMStore()
 const changeStore = useChangeStore()
+const globalChangeCount = computed<number>(() => changeStore.changeCount)
 
 const klasseId = computed<number>(() => {
   const raw = route.params.klasseId
@@ -526,7 +527,7 @@ function goSave(): void {
           {{ schuelerListe.length }} SuS, {{ rowChangeCount }} Zeilen mit Änderungen
         </p>
       </div>
-      <button class="btn primary" type="button" :disabled="rowChangeCount === 0" @click="goSave">
+      <button class="btn primary" type="button" :disabled="globalChangeCount === 0" @click="goSave">
         Speichern
       </button>
     </header>

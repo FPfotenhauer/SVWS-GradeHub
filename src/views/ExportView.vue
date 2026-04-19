@@ -83,6 +83,80 @@ const sourceDisplayName = computed<string>(() => {
   return sourceFileName.value
 })
 
+const fieldLabels: Record<LeistungsChange['feld'], string> = {
+  note: 'Note',
+  noteQuartal: 'Quartalsnote',
+  fehlstundenFach: 'FS Fach',
+  fehlstundenUnentschuldigtFach: 'FSU Fach',
+  fehlstundenGesamt: 'FSG',
+  fehlstundenUnentschuldigt: 'FSU',
+  lernbereichArbeitslehre: 'AL',
+  lernbereichNaturwissenschaft: 'NW',
+  asv: 'ASV',
+  aue: 'AUE',
+  zeugnisbemerkung: 'ZB',
+  fachbezogeneBemerkungen: 'Fachbez. Bemerkung',
+  istGemahnt: 'Gemahnt',
+  mahndatum: 'Mahndatum',
+}
+
+type ChangeSummaryItem = {
+  key: string
+  schueler: string
+  kontext: string
+  feld: string
+  alt: string
+  neu: string
+}
+
+function formatValue(value: string | null): string {
+  if (value === null || value === '') {
+    return 'leer'
+  }
+
+  if (value === 'true') return 'Ja'
+  if (value === 'false') return 'Nein'
+  return value
+}
+
+const changeSummary = computed<ChangeSummaryItem[]>(() => {
+  const data = enmDaten.value
+  if (!data) {
+    return []
+  }
+
+  const schuelerById = new Map(data.schueler.map((schueler) => [
+    schueler.id,
+    `${schueler.nachname}, ${schueler.vorname}`,
+  ]))
+  const lerngruppeById = new Map(data.lerngruppen.map((lerngruppe) => [
+    lerngruppe.id,
+    lerngruppe.bezeichnung,
+  ]))
+  const klasseById = new Map(data.klassen.map((klasse) => [
+    klasse.id,
+    klasse.kuerzelAnzeige || klasse.kuerzel,
+  ]))
+
+  return [...changeStore.changes.values()]
+    .map((change) => {
+      const schueler = schuelerById.get(change.schuelerId) ?? `SuS ${change.schuelerId}`
+      const kontext = change.lerngruppenId < 0
+        ? `Klassenleitung ${klasseById.get(Math.abs(change.lerngruppenId)) ?? Math.abs(change.lerngruppenId)}`
+        : `Lerngruppe ${lerngruppeById.get(change.lerngruppenId) ?? change.lerngruppenId}`
+
+      return {
+        key: `${change.schuelerId}:${change.lerngruppenId}:${change.feld}`,
+        schueler,
+        kontext,
+        feld: fieldLabels[change.feld],
+        alt: formatValue(change.alterWert),
+        neu: formatValue(change.neuerWert),
+      }
+    })
+    .sort((a, b) => a.schueler.localeCompare(b.schueler, 'de') || a.feld.localeCompare(b.feld, 'de'))
+})
+
 function clearMessages(): void {
   statusMessage.value = ''
   errorMessage.value = ''
@@ -547,6 +621,28 @@ function goBack(): void {
       </div>
     </section>
 
+    <section v-if="isLoaded && enmDaten && changeSummary.length > 0" class="card change-card">
+      <div class="change-card-header">
+        <h2>Änderungen</h2>
+        <span>{{ changeSummary.length }} Einträge</span>
+      </div>
+
+      <div class="change-list" role="list">
+        <article v-for="item in changeSummary" :key="item.key" class="change-item" role="listitem">
+          <div class="change-topline">
+            <strong>{{ item.schueler }}</strong>
+            <span>{{ item.kontext }}</span>
+          </div>
+          <div class="change-bottomline">
+            <span class="change-field">{{ item.feld }}</span>
+            <span>{{ item.alt }}</span>
+            <span class="change-arrow">→</span>
+            <span>{{ item.neu }}</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section v-else class="card">
       <p>Es sind keine ENM-Daten geladen.</p>
       <button class="secondary" type="button" @click="goBack">Zurück</button>
@@ -568,6 +664,11 @@ function goBack(): void {
 
 h1 {
   margin: 0;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .card {
@@ -593,6 +694,63 @@ p {
   flex-wrap: wrap;
   gap: 0.6rem;
   margin-top: 0.4rem;
+}
+
+.change-card {
+  gap: 0.85rem;
+}
+
+.change-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.change-card-header span {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
+.change-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.change-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary) 8%);
+}
+
+.change-topline,
+.change-bottomline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.change-topline span,
+.change-bottomline span {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
+.change-field {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-text) !important;
+}
+
+.change-arrow {
+  color: var(--color-text) !important;
 }
 
 button {
