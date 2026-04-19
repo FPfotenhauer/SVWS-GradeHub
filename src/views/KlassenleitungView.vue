@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import FloskelPickerDialog from '@/components/FloskelPickerDialog.vue'
@@ -28,6 +28,12 @@ const VALID_NOTES = new Set<string>([
   '5+', '5', '5-',
   '6',
   'AT', 'E1', 'E2', 'E3', 'NT', 'NB', 'NE', 'LM', 'AM',
+])
+
+const NOTES_AUTO_ADVANCE = new Set<string>([
+  '1+', '1-', '2+', '2-', '3+', '3-', '4+', '4-', '5+', '5-',
+  'AT', 'E1', 'E2', 'E3', 'NT', 'NB', 'NE', 'LM', 'AM',
+  '6',
 ])
 
 const route = useRoute()
@@ -90,6 +96,14 @@ const lehrerKuerzel = computed<string>(() => {
 const editValues = reactive(new Map<string, string>())
 const invalidIds = reactive(new Set<string>())
 
+const fehlstundenGesamtInputs = ref<(HTMLInputElement | null)[]>([])
+const fehlstundenUnentschuldigtInputs = ref<(HTMLInputElement | null)[]>([])
+const lernbereichArbeitslehreInputs = ref<(HTMLInputElement | null)[]>([])
+const lernbereichNaturwissenschaftInputs = ref<(HTMLInputElement | null)[]>([])
+const asvInputs = ref<(HTMLInputElement | null)[]>([])
+const aueInputs = ref<(HTMLInputElement | null)[]>([])
+const zeugnisbemerkungInputs = ref<(HTMLInputElement | null)[]>([])
+
 function valueKey(schuelerId: number, feld: KlassenleitungsFeld): string {
   return `${schuelerId}:${feld}`
 }
@@ -100,11 +114,11 @@ function invalidKey(schuelerId: number, feld: KlassenleitungsFeld): string {
 
 function originalFieldValue(schueler: KlassenSchueler, feld: KlassenleitungsFeld): string {
   if (feld === 'fehlstundenGesamt') {
-    return String(schueler.lernabschnitt.fehlstundenGesamt)
+    return String(schueler.lernabschnitt.fehlstundenGesamt ?? 0)
   }
 
   if (feld === 'fehlstundenUnentschuldigt') {
-    return String(schueler.lernabschnitt.fehlstundenGesamtUnentschuldigt)
+    return String(schueler.lernabschnitt.fehlstundenGesamtUnentschuldigt ?? 0)
   }
 
   if (feld === 'lernbereichArbeitslehre') {
@@ -176,26 +190,113 @@ function isValidValue(feld: KlassenleitungsFeld, value: string): boolean {
   return true
 }
 
+function parseNumericValue(value: string): number {
+  if (value.trim() === '') {
+    return 0
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function isLernbereichFeld(
+  feld: KlassenleitungsFeld,
+): feld is 'lernbereichArbeitslehre' | 'lernbereichNaturwissenschaft' {
+  return feld === 'lernbereichArbeitslehre' || feld === 'lernbereichNaturwissenschaft'
+}
+
+function isValidNotePrefix(value: string): boolean {
+  if (value === '') return true
+  for (const note of VALID_NOTES) {
+    if (note.startsWith(value)) {
+      return true
+    }
+  }
+  return false
+}
+
 function getCurrentValue(schueler: KlassenSchueler, feld: KlassenleitungsFeld): string {
-  return editValues.get(valueKey(schueler.id, feld)) ?? originalFieldValue(schueler, feld)
+  const current = editValues.get(valueKey(schueler.id, feld)) ?? originalFieldValue(schueler, feld)
+
+  if ((feld === 'fehlstundenGesamt' || feld === 'fehlstundenUnentschuldigt') && current === 'null') {
+    return '0'
+  }
+
+  return current
+}
+
+function getInputRefs(feld: KlassenleitungsFeld): (HTMLInputElement | null)[] {
+  if (feld === 'fehlstundenGesamt') return fehlstundenGesamtInputs.value
+  if (feld === 'fehlstundenUnentschuldigt') return fehlstundenUnentschuldigtInputs.value
+  if (feld === 'lernbereichArbeitslehre') return lernbereichArbeitslehreInputs.value
+  if (feld === 'lernbereichNaturwissenschaft') return lernbereichNaturwissenschaftInputs.value
+  if (feld === 'asv') return asvInputs.value
+  if (feld === 'aue') return aueInputs.value
+  return zeugnisbemerkungInputs.value
+}
+
+function setInputRef(
+  el: unknown,
+  index: number,
+  schueler: KlassenSchueler,
+  feld: KlassenleitungsFeld,
+): void {
+  const refs = getInputRefs(feld)
+  refs[index] = el instanceof HTMLInputElement ? el : null
+
+  if (el instanceof HTMLInputElement) {
+    const value = getCurrentValue(schueler, feld)
+    if (el.value !== value) {
+      el.value = value
+    }
+  }
+}
+
+function focusFieldAt(index: number, feld: KlassenleitungsFeld): void {
+  if (index < 0 || index >= schuelerListe.value.length) {
+    return
+  }
+
+  const input = getInputRefs(feld)[index]
+  if (input) {
+    input.focus()
+    input.select()
+  }
 }
 
 function hasChange(schueler: KlassenSchueler, feld: KlassenleitungsFeld): boolean {
   return changeStore.getChange(schueler.id, changeKeyContext.value, feld as LeistungsFeld) !== undefined
 }
 
-function commitField(schueler: KlassenSchueler, feld: KlassenleitungsFeld, rawValue: string): void {
+function commitField(schueler: KlassenSchueler, feld: KlassenleitungsFeld, rawValue: string): boolean {
   const normalized = normalizeValue(feld, rawValue)
   const key = valueKey(schueler.id, feld)
   const invalid = invalidKey(schueler.id, feld)
 
-  editValues.set(key, normalized)
-
   if (!isValidValue(feld, normalized)) {
     invalidIds.add(invalid)
-    return
+    return false
   }
 
+  if (feld === 'fehlstundenUnentschuldigt') {
+    const fsg = parseNumericValue(getCurrentValue(schueler, 'fehlstundenGesamt'))
+    const fsu = parseNumericValue(normalized)
+    if (fsu > fsg) {
+      invalidIds.add(invalid)
+      return false
+    }
+  }
+
+  if (feld === 'fehlstundenGesamt') {
+    const fsu = parseNumericValue(getCurrentValue(schueler, 'fehlstundenUnentschuldigt'))
+    const fsg = parseNumericValue(normalized)
+    if (fsu > fsg) {
+      invalidIds.add(invalid)
+      return false
+    }
+  }
+
+  editValues.set(key, normalized)
   invalidIds.delete(invalid)
 
   changeStore.setChange({
@@ -208,6 +309,8 @@ function commitField(schueler: KlassenSchueler, feld: KlassenleitungsFeld, rawVa
     geaendertVon: lehrerKuerzel.value,
     enmBasisTimestamp: resolveTimestamp(schueler, feld),
   })
+
+  return true
 }
 
 function onInput(event: Event, schueler: KlassenSchueler, feld: KlassenleitungsFeld): void {
@@ -216,16 +319,116 @@ function onInput(event: Event, schueler: KlassenSchueler, feld: KlassenleitungsF
   if (input.value !== normalized) {
     input.value = normalized
   }
-  commitField(schueler, feld, normalized)
+  if (!commitField(schueler, feld, normalized)) {
+    input.value = getCurrentValue(schueler, feld)
+  }
+}
+
+function onLernbereichInput(
+  event: Event,
+  schueler: KlassenSchueler,
+  index: number,
+  feld: 'lernbereichArbeitslehre' | 'lernbereichNaturwissenschaft',
+): void {
+  const input = event.target as HTMLInputElement
+  const normalized = normalizeValue(feld, input.value)
+  const current = getCurrentValue(schueler, feld)
+
+  if (!isValidNotePrefix(normalized)) {
+    input.value = current
+    invalidIds.delete(invalidKey(schueler.id, feld))
+    return
+  }
+
+  if (input.value !== normalized) {
+    input.value = normalized
+  }
+
+  invalidIds.delete(invalidKey(schueler.id, feld))
+
+  if (NOTES_AUTO_ADVANCE.has(normalized)) {
+    if (commitField(schueler, feld, normalized)) {
+      nextTick(() => focusFieldAt(index + 1, feld))
+    } else {
+      input.value = getCurrentValue(schueler, feld)
+    }
+  }
 }
 
 function onBlur(event: FocusEvent, schueler: KlassenSchueler, feld: KlassenleitungsFeld): void {
   const input = event.target as HTMLInputElement
   const normalized = normalizeValue(feld, input.value)
+
+  if (isLernbereichFeld(feld) && normalized !== '' && !VALID_NOTES.has(normalized)) {
+    input.value = getCurrentValue(schueler, feld)
+    invalidIds.delete(invalidKey(schueler.id, feld))
+    return
+  }
+
   if (input.value !== normalized) {
     input.value = normalized
   }
-  commitField(schueler, feld, normalized)
+  if (!commitField(schueler, feld, normalized)) {
+    input.value = getCurrentValue(schueler, feld)
+  }
+}
+
+function onFieldKeydown(
+  event: KeyboardEvent,
+  schueler: KlassenSchueler,
+  index: number,
+  feld: KlassenleitungsFeld,
+): void {
+  const input = event.target as HTMLInputElement
+
+  if (event.key === 'Enter' || event.key === 'ArrowDown') {
+    event.preventDefault()
+    const normalized = normalizeValue(feld, input.value)
+
+    if (isLernbereichFeld(feld) && normalized !== '' && !VALID_NOTES.has(normalized)) {
+      input.value = getCurrentValue(schueler, feld)
+      invalidIds.delete(invalidKey(schueler.id, feld))
+      return
+    }
+
+    if (input.value !== normalized) {
+      input.value = normalized
+    }
+    if (commitField(schueler, feld, normalized)) {
+      nextTick(() => focusFieldAt(index + 1, feld))
+    } else {
+      input.value = getCurrentValue(schueler, feld)
+    }
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    const normalized = normalizeValue(feld, input.value)
+
+    if (isLernbereichFeld(feld) && normalized !== '' && !VALID_NOTES.has(normalized)) {
+      input.value = getCurrentValue(schueler, feld)
+      invalidIds.delete(invalidKey(schueler.id, feld))
+      return
+    }
+
+    if (input.value !== normalized) {
+      input.value = normalized
+    }
+    if (commitField(schueler, feld, normalized)) {
+      nextTick(() => focusFieldAt(index - 1, feld))
+    } else {
+      input.value = getCurrentValue(schueler, feld)
+    }
+    return
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    const reverted = getCurrentValue(schueler, feld)
+    input.value = reverted
+    invalidIds.delete(invalidKey(schueler.id, feld))
+  }
 }
 
 const textDialog = reactive<{
@@ -372,7 +575,9 @@ function goSave(): void {
                 type="text"
                 inputmode="numeric"
                 :value="getCurrentValue(schueler, 'fehlstundenGesamt')"
+                :ref="(el) => setInputRef(el, idx, schueler, 'fehlstundenGesamt')"
                 @input="onInput($event, schueler, 'fehlstundenGesamt')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenGesamt')"
                 @blur="onBlur($event, schueler, 'fehlstundenGesamt')"
               />
             </td>
@@ -383,7 +588,9 @@ function goSave(): void {
                 type="text"
                 inputmode="numeric"
                 :value="getCurrentValue(schueler, 'fehlstundenUnentschuldigt')"
+                :ref="(el) => setInputRef(el, idx, schueler, 'fehlstundenUnentschuldigt')"
                 @input="onInput($event, schueler, 'fehlstundenUnentschuldigt')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenUnentschuldigt')"
                 @blur="onBlur($event, schueler, 'fehlstundenUnentschuldigt')"
               />
             </td>
@@ -394,7 +601,9 @@ function goSave(): void {
                 type="text"
                 maxlength="2"
                 :value="getCurrentValue(schueler, 'lernbereichArbeitslehre')"
-                @input="onInput($event, schueler, 'lernbereichArbeitslehre')"
+                :ref="(el) => setInputRef(el, idx, schueler, 'lernbereichArbeitslehre')"
+                @input="onLernbereichInput($event, schueler, idx, 'lernbereichArbeitslehre')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'lernbereichArbeitslehre')"
                 @blur="onBlur($event, schueler, 'lernbereichArbeitslehre')"
               />
             </td>
@@ -405,7 +614,9 @@ function goSave(): void {
                 type="text"
                 maxlength="2"
                 :value="getCurrentValue(schueler, 'lernbereichNaturwissenschaft')"
-                @input="onInput($event, schueler, 'lernbereichNaturwissenschaft')"
+                :ref="(el) => setInputRef(el, idx, schueler, 'lernbereichNaturwissenschaft')"
+                @input="onLernbereichInput($event, schueler, idx, 'lernbereichNaturwissenschaft')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'lernbereichNaturwissenschaft')"
                 @blur="onBlur($event, schueler, 'lernbereichNaturwissenschaft')"
               />
             </td>
@@ -415,8 +626,10 @@ function goSave(): void {
                 :class="{ edited: hasChange(schueler, 'asv') }"
                 type="text"
                 :value="getCurrentValue(schueler, 'asv')"
-                @click="openTextDialog(schueler, idx, 'asv')"
+                :ref="(el) => setInputRef(el, idx, schueler, 'asv')"
+                @dblclick="openTextDialog(schueler, idx, 'asv')"
                 @input="onInput($event, schueler, 'asv')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'asv')"
                 @blur="onBlur($event, schueler, 'asv')"
               />
             </td>
@@ -426,8 +639,10 @@ function goSave(): void {
                 :class="{ edited: hasChange(schueler, 'aue') }"
                 type="text"
                 :value="getCurrentValue(schueler, 'aue')"
-                @click="openTextDialog(schueler, idx, 'aue')"
+                :ref="(el) => setInputRef(el, idx, schueler, 'aue')"
+                @dblclick="openTextDialog(schueler, idx, 'aue')"
                 @input="onInput($event, schueler, 'aue')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'aue')"
                 @blur="onBlur($event, schueler, 'aue')"
               />
             </td>
@@ -437,8 +652,10 @@ function goSave(): void {
                 :class="{ edited: hasChange(schueler, 'zeugnisbemerkung') }"
                 type="text"
                 :value="getCurrentValue(schueler, 'zeugnisbemerkung')"
-                @click="openTextDialog(schueler, idx, 'zeugnisbemerkung')"
+                :ref="(el) => setInputRef(el, idx, schueler, 'zeugnisbemerkung')"
+                @dblclick="openTextDialog(schueler, idx, 'zeugnisbemerkung')"
                 @input="onInput($event, schueler, 'zeugnisbemerkung')"
+                @keydown="onFieldKeydown($event, schueler, idx, 'zeugnisbemerkung')"
                 @blur="onBlur($event, schueler, 'zeugnisbemerkung')"
               />
             </td>
