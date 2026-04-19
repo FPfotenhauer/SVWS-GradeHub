@@ -76,6 +76,13 @@ const entschluesselnFehler = ref<string>('')
 const entschluesselnLaeuft = ref<boolean>(false)
 const ausstehendeVerschluesselteDatei = ref<{ name: string; content: string } | null>(null)
 
+type ENMStoreEncryptedCompat = typeof enmStore & {
+  setEncryptedSource?: (nextSourceFileName: string, nextOriginalFileName: string, nextPassword: string) => void
+  encryptedSourceFileName?: string
+  encryptedOriginalFileName?: string
+  encryptedSourcePassword?: string
+}
+
 function encodeBasicAuth(user: string, pass: string): string {
   return `Basic ${window.btoa(`${user}:${pass}`)}`
 }
@@ -120,13 +127,27 @@ function schliesseEntschluesselnModal(): void {
   ausstehendeVerschluesselteDatei.value = null
 }
 
+function formatCryptoError(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'OperationError') {
+    return 'Entschluesselung fehlgeschlagen. Kennwort ist ungueltig oder die Datei ist beschaedigt.'
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return 'Entschlüsselung fehlgeschlagen. Bitte Kennwort und Datei prüfen.'
+}
+
 async function ladeVerschluesselteDateiMitKennwort(): Promise<void> {
   if (!ausstehendeVerschluesselteDatei.value) {
     entschluesselnFehler.value = 'Es wurde keine Datei ausgewählt.'
     return
   }
 
-  if (entschluesselnKennwort.value.trim() === '') {
+  const normalizedPassword = entschluesselnKennwort.value.trim()
+
+  if (normalizedPassword === '') {
     entschluesselnFehler.value = 'Bitte ein Kennwort eingeben.'
     return
   }
@@ -144,7 +165,7 @@ async function ladeVerschluesselteDateiMitKennwort(): Promise<void> {
     const salt = base64NachArrayBuffer(parsed.salt)
     const iv = base64NachArrayBuffer(parsed.iv)
     const ciphertext = base64NachArrayBuffer(parsed.ciphertext)
-    const key = await leitenSchluesselAb(entschluesselnKennwort.value, salt)
+    const key = await leitenSchluesselAb(normalizedPassword, salt)
     const plainZip = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
 
     const zipEntries = unzipSync(new Uint8Array(plainZip))
@@ -158,13 +179,26 @@ async function ladeVerschluesselteDateiMitKennwort(): Promise<void> {
     const enmFile = new File([enmBlob], 'enm.json', { type: 'application/json' })
     await enmStore.ladeENMVonDatei(enmFile)
 
+    const enmStoreCompat = enmStore as ENMStoreEncryptedCompat
+    if (typeof enmStoreCompat.setEncryptedSource === 'function') {
+      enmStoreCompat.setEncryptedSource(
+        ausstehendeVerschluesselteDatei.value.name,
+        parsed.originalFileName,
+        normalizedPassword,
+      )
+    } else {
+      // Fallback fuer veraltete Client-Bundles ohne neue Store-Action.
+      enmStoreCompat.encryptedSourceFileName = ausstehendeVerschluesselteDatei.value.name
+      enmStoreCompat.encryptedOriginalFileName = parsed.originalFileName
+      enmStoreCompat.encryptedSourcePassword = normalizedPassword
+      console.warn('ENM-Store without setEncryptedSource detected. Please reload the app to update cached assets.')
+    }
+
     statusMessage.value = `Verschlüsselte Datei geladen: ${ausstehendeVerschluesselteDatei.value.name}`
     schliesseEntschluesselnModal()
     await router.push('/lerngruppen')
   } catch (error) {
-    entschluesselnFehler.value = error instanceof Error
-      ? error.message
-      : 'Entschlüsselung fehlgeschlagen. Bitte Kennwort und Datei prüfen.'
+    entschluesselnFehler.value = formatCryptoError(error)
   } finally {
     entschluesselnLaeuft.value = false
     isLoading.value = false
@@ -231,6 +265,30 @@ function clearMessages(): void {
   errorMessage.value = ''
 }
 
+function isEncryptedFileName(name: string): boolean {
+  const lower = name.toLowerCase()
+  return lower.endsWith('.enc.json') || lower.endsWith('.zip.enc') || lower.endsWith('.enc')
+}
+
+async function leseVerschluesseltenPayloadWennVorhanden(file: File): Promise<string | null> {
+  const looksLikeJson = isEncryptedFileName(file.name)
+    || file.name.toLowerCase().endsWith('.json')
+    || file.type.toLowerCase().includes('json')
+
+  if (!looksLikeJson) {
+    return null
+  }
+
+  const text = await file.text()
+
+  try {
+    const parsed = JSON.parse(text) as unknown
+    return istEncryptedZipPayload(parsed) ? text : null
+  } catch {
+    return null
+  }
+}
+
 async function ladeVomServer(): Promise<void> {
   clearMessages()
   isLoading.value = true
@@ -292,8 +350,8 @@ async function verarbeiteDatei(file: File): Promise<void> {
   clearMessages()
 
   try {
-    if (file.name.endsWith('.enc.json')) {
-      const encryptedContent = await file.text()
+    const encryptedContent = await leseVerschluesseltenPayloadWennVorhanden(file)
+    if (encryptedContent !== null) {
       ausstehendeVerschluesselteDatei.value = {
         name: file.name,
         content: encryptedContent,

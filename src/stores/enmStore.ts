@@ -16,6 +16,13 @@ export interface LehrerKurzinfo {
 
 export type ENMDataSource = 'api' | 'file' | null
 
+function wipeString(value: string): string {
+  if (value === '') {
+    return ''
+  }
+  return '\0'.repeat(value.length)
+}
+
 function parseENMFromBytes(bytes: Uint8Array): ENMDaten {
   const isGzip = bytes.length > 2 && bytes[0] === GZIP_MAGIC_BYTE_1 && bytes[1] === GZIP_MAGIC_BYTE_2
   const json = isGzip ? strFromU8(decompressSync(bytes)) : strFromU8(bytes)
@@ -87,6 +94,23 @@ export const useENMStore = defineStore('enm', () => {
   const isLoaded = ref<boolean>(false)
   const dataSource = ref<ENMDataSource>(null)
   const sourceFileName = ref<string>('')
+  const encryptedSourceFileName = ref<string>('')
+  const encryptedOriginalFileName = ref<string>('')
+  const encryptedSourcePassword = ref<string>('')
+
+  function clearEncryptedSource(): void {
+    encryptedSourcePassword.value = wipeString(encryptedSourcePassword.value)
+    encryptedSourcePassword.value = ''
+    encryptedSourceFileName.value = ''
+    encryptedOriginalFileName.value = ''
+  }
+
+  function setEncryptedSource(nextSourceFileName: string, nextOriginalFileName: string, nextPassword: string): void {
+    clearEncryptedSource()
+    encryptedSourceFileName.value = nextSourceFileName
+    encryptedOriginalFileName.value = nextOriginalFileName
+    encryptedSourcePassword.value = nextPassword
+  }
 
   async function ladeLehrerListeVomServer(baseUrl: string, schema: string, username: string, password: string): Promise<LehrerKurzinfo[]> {
     const cleanedBaseUrl = baseUrl.replace(/\/$/, '')
@@ -160,6 +184,7 @@ export const useENMStore = defineStore('enm', () => {
         isLoaded.value = true
         dataSource.value = 'api'
         sourceFileName.value = ''
+        clearEncryptedSource()
         return
       } catch (error) {
         lastError = toFetchError(error, endpoint)
@@ -179,6 +204,7 @@ export const useENMStore = defineStore('enm', () => {
     isLoaded.value = true
     dataSource.value = 'file'
     sourceFileName.value = file.name
+    clearEncryptedSource()
   }
 
   function ersetzeENMDaten(next: ENMDaten): void {
@@ -191,6 +217,7 @@ export const useENMStore = defineStore('enm', () => {
     isLoaded.value = false
     dataSource.value = null
     sourceFileName.value = ''
+    clearEncryptedSource()
   }
 
   return {
@@ -198,10 +225,15 @@ export const useENMStore = defineStore('enm', () => {
     isLoaded: readonly(isLoaded),
     dataSource: readonly(dataSource),
     sourceFileName: readonly(sourceFileName),
+    encryptedSourceFileName: readonly(encryptedSourceFileName),
+    encryptedOriginalFileName: readonly(encryptedOriginalFileName),
+    encryptedSourcePassword: readonly(encryptedSourcePassword),
     ladeLehrerListeVomServer,
     ladeENMVonServer,
     ladeENMVonDatei,
     ersetzeENMDaten,
+    setEncryptedSource,
+    clearEncryptedSource,
     reset,
   }
 })

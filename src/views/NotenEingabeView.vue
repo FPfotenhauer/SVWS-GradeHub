@@ -13,6 +13,7 @@ const route = useRoute()
 const router = useRouter()
 const enmStore = useENMStore()
 const changeStore = useChangeStore()
+const globalChangeCount = computed<number>(() => changeStore.changeCount)
 
 // ── Route ──────────────────────────────────────────────────────────────────
 
@@ -635,7 +636,7 @@ function goSave(): void {
         <button
           class="btn-save"
           type="button"
-          :disabled="aenderungsCount === 0"
+          :disabled="globalChangeCount === 0"
           @click="goSave"
         >
           Speichern

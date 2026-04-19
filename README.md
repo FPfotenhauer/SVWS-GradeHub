@@ -64,20 +64,41 @@ npm run dev
 npm run build
 ```
 
-Dieser Build erzeugt in `dist/` eine `index.html` sowie den Ordner `assets/` mit:
+Dieser Build ist fuer `file://` optimiert und erzeugt in `dist/` eine `index.html` sowie den Ordner `assets/` mit:
 
 - `assets/app.js`
 - `assets/app.css`
 
 Geeignet fuer Deployment auf statischem Webserver und fuer den direkten Start von `dist/index.html` im Browser.
 
-### Offline-Singlefile-Build erzeugen
+Optionaler Webserver-Build (ES-Module):
+
+```bash
+npm run build:web
+```
+
+### Offline-Build fuer file:// erzeugen
 
 ```bash
 npm run build:offline
 ```
 
-Dieser Build erzeugt eine einzelne `dist/index.html` mit inline eingebetteten Assets.
+`build:offline` ist ein Alias auf `npm run build`.
+
+Kurzform:
+
+```bash
+npm run offline
+```
+
+`npm run offline` nutzt den Standard-Build mit folgender Struktur in `dist/`:
+`npm run offline` nutzt denselben Standard-Build wie `npm run build` (ein Befehl fuer den Alltag) mit folgender Struktur in `dist/`:
+
+- `index.html`
+- `assets/app.js`
+- `assets/app.css`
+
+Hinweis: Der JS-Bundle wird als ES-Modul geladen. Das ist erforderlich, weil enthaltene Abhaengigkeiten `import.meta.url` verwenden.
 
 ### Vorschau des Builds
 

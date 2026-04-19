@@ -90,6 +90,9 @@ export interface EnmLehrer {
   eMailDienstlich: string | null
   passwordHash: string
   tsPasswordHash: string | null
+  istInitialPassword?: boolean
+  istErstanmeldung?: boolean
+  isInitialPassword?: boolean
 }
 
 export interface EnmLerngruppe {

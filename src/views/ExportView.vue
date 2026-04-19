@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { strToU8, zipSync } from 'fflate'
 
 import { useAuthStore } from '@/stores/authStore'
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { EnmExport, EnmLeistungsdaten } from '@/types/enm'
+import type { LeistungsChange } from '@/types/changes'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -18,12 +20,24 @@ const enmDaten = computed(() => enmStore.enmDaten)
 const isLoaded = computed<boolean>(() => enmStore.isLoaded)
 const dataSource = computed<DataSource>(() => enmStore.dataSource)
 const sourceFileName = computed<string>(() => enmStore.sourceFileName ?? '')
+const encryptedSourceFileName = computed<string>(() => enmStore.encryptedSourceFileName ?? '')
+const encryptedOriginalFileName = computed<string>(() => enmStore.encryptedOriginalFileName ?? '')
+const encryptedSourcePassword = computed<string>(() => enmStore.encryptedSourcePassword ?? '')
 
 const isSaving = ref<boolean>(false)
 const statusMessage = ref<string>('')
 const errorMessage = ref<string>('')
 
 type DataSource = 'api' | 'file' | null
+
+type EncryptedZipPayload = {
+  format: 'gradehub-encrypted-zip'
+  version: number
+  originalFileName: string
+  salt: string
+  iv: string
+  ciphertext: string
+}
 
 const effectiveDataSource = computed<DataSource>(() => {
   if (dataSource.value === 'api' || dataSource.value === 'file') {
@@ -43,6 +57,7 @@ const effectiveDataSource = computed<DataSource>(() => {
 
 const dataSourceLabel = computed<string>(() => {
   if (effectiveDataSource.value === 'api') return 'SVWS-API'
+  if (isEncryptedFileSource.value) return 'Datei (verschluesselt)'
   if (effectiveDataSource.value === 'file') return 'Datei'
   return 'unbekannt'
 })
@@ -52,14 +67,134 @@ const canSaveToServer = computed<boolean>(() => {
 })
 
 const isFileSource = computed<boolean>(() => effectiveDataSource.value === 'file')
+const supportsNativeSaveDialog = computed<boolean>(() => {
+  const picker = window as typeof window & { showSaveFilePicker?: unknown }
+  return typeof picker.showSaveFilePicker === 'function'
+})
+const isEncryptedFileSource = computed<boolean>(() => {
+  return effectiveDataSource.value === 'file'
+    && encryptedSourcePassword.value.trim() !== ''
+    && encryptedOriginalFileName.value.trim() !== ''
+})
+const sourceDisplayName = computed<string>(() => {
+  if (isEncryptedFileSource.value && encryptedSourceFileName.value.trim() !== '') {
+    return encryptedSourceFileName.value
+  }
+  return sourceFileName.value
+})
+
+const fieldLabels: Record<LeistungsChange['feld'], string> = {
+  note: 'Note',
+  noteQuartal: 'Quartalsnote',
+  fehlstundenFach: 'FS Fach',
+  fehlstundenUnentschuldigtFach: 'FSU Fach',
+  fehlstundenGesamt: 'FSG',
+  fehlstundenUnentschuldigt: 'FSU',
+  lernbereichArbeitslehre: 'AL',
+  lernbereichNaturwissenschaft: 'NW',
+  asv: 'ASV',
+  aue: 'AUE',
+  zeugnisbemerkung: 'ZB',
+  fachbezogeneBemerkungen: 'Fachbez. Bemerkung',
+  istGemahnt: 'Gemahnt',
+  mahndatum: 'Mahndatum',
+}
+
+type ChangeSummaryItem = {
+  key: string
+  schueler: string
+  kontext: string
+  feld: string
+  alt: string
+  neu: string
+}
+
+function formatValue(value: string | null): string {
+  if (value === null || value === '') {
+    return 'leer'
+  }
+
+  if (value === 'true') return 'Ja'
+  if (value === 'false') return 'Nein'
+  return value
+}
+
+const changeSummary = computed<ChangeSummaryItem[]>(() => {
+  const data = enmDaten.value
+  if (!data) {
+    return []
+  }
+
+  const schuelerById = new Map(data.schueler.map((schueler) => [
+    schueler.id,
+    `${schueler.nachname}, ${schueler.vorname}`,
+  ]))
+  const lerngruppeById = new Map(data.lerngruppen.map((lerngruppe) => [
+    lerngruppe.id,
+    lerngruppe.bezeichnung,
+  ]))
+  const klasseById = new Map(data.klassen.map((klasse) => [
+    klasse.id,
+    klasse.kuerzelAnzeige || klasse.kuerzel,
+  ]))
+
+  return [...changeStore.changes.values()]
+    .map((change) => {
+      const schueler = schuelerById.get(change.schuelerId) ?? `SuS ${change.schuelerId}`
+      const kontext = change.lerngruppenId < 0
+        ? `Klassenleitung ${klasseById.get(Math.abs(change.lerngruppenId)) ?? Math.abs(change.lerngruppenId)}`
+        : `Lerngruppe ${lerngruppeById.get(change.lerngruppenId) ?? change.lerngruppenId}`
+
+      return {
+        key: `${change.schuelerId}:${change.lerngruppenId}:${change.feld}`,
+        schueler,
+        kontext,
+        feld: fieldLabels[change.feld],
+        alt: formatValue(change.alterWert),
+        neu: formatValue(change.neuerWert),
+      }
+    })
+    .sort((a, b) => a.schueler.localeCompare(b.schueler, 'de') || a.feld.localeCompare(b.feld, 'de'))
+})
 
 function clearMessages(): void {
   statusMessage.value = ''
   errorMessage.value = ''
 }
 
+function formatSaveError(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return 'Speichern wurde abgebrochen.'
+  }
+
+  if (error instanceof DOMException && error.name === 'OperationError') {
+    return 'Verschluesseltes Speichern fehlgeschlagen. Kennwort oder Dateiformat sind ungueltig.'
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return 'Speichern fehlgeschlagen.'
+}
+
 function cloneENM(data: unknown): EnmExport {
   return JSON.parse(JSON.stringify(data)) as EnmExport
+}
+
+function normalizeLehrerInitialPassword(next: EnmExport): void {
+  for (const lehrer of next.lehrer) {
+    const initialPassword = typeof lehrer.istInitialPassword === 'boolean'
+      ? lehrer.istInitialPassword
+      : typeof lehrer.isInitialPassword === 'boolean'
+        ? lehrer.isInitialPassword
+        : typeof lehrer.istErstanmeldung === 'boolean'
+          ? lehrer.istErstanmeldung
+          : true
+
+    lehrer.istInitialPassword = initialPassword
+    delete lehrer.isInitialPassword
+  }
 }
 
 function parseNumberValue(value: string | null): number {
@@ -139,6 +274,52 @@ function setLeistungsfeld(
   }
 }
 
+function setSchuelerfeld(
+  change: LeistungsChange,
+  schueler: EnmExport['schueler'][number],
+): void {
+  const ts = toSVWSTimestamp(change.geaendertAm)
+
+  if (change.feld === 'fehlstundenGesamt') {
+    schueler.lernabschnitt.fehlstundenGesamt = parseNumberValue(change.neuerWert)
+    schueler.lernabschnitt.tsFehlstundenGesamt = ts
+    return
+  }
+
+  if (change.feld === 'fehlstundenUnentschuldigt') {
+    schueler.lernabschnitt.fehlstundenGesamtUnentschuldigt = parseNumberValue(change.neuerWert)
+    schueler.lernabschnitt.tsFehlstundenGesamtUnentschuldigt = ts
+    return
+  }
+
+  if (change.feld === 'lernbereichArbeitslehre') {
+    schueler.lernabschnitt.lernbereich1note = change.neuerWert as EnmLeistungsdaten['note']
+    return
+  }
+
+  if (change.feld === 'lernbereichNaturwissenschaft') {
+    schueler.lernabschnitt.lernbereich2note = change.neuerWert as EnmLeistungsdaten['note']
+    return
+  }
+
+  if (change.feld === 'asv') {
+    schueler.bemerkungen.ASV = change.neuerWert
+    schueler.bemerkungen.tsASV = ts
+    return
+  }
+
+  if (change.feld === 'aue') {
+    schueler.bemerkungen.AUE = change.neuerWert
+    schueler.bemerkungen.tsAUE = ts
+    return
+  }
+
+  if (change.feld === 'zeugnisbemerkung') {
+    schueler.bemerkungen.ZB = change.neuerWert
+    schueler.bemerkungen.tsZB = ts
+  }
+}
+
 function buildRueckschreibeENM(): EnmExport {
   const source = enmDaten.value
   if (!source) {
@@ -146,15 +327,36 @@ function buildRueckschreibeENM(): EnmExport {
   }
 
   const next = cloneENM(source)
+  normalizeLehrerInitialPassword(next)
   const leistungByKey = new Map<string, EnmLeistungsdaten>()
+  const schuelerById = new Map<number, EnmExport['schueler'][number]>()
 
   for (const schueler of next.schueler) {
+    schuelerById.set(schueler.id, schueler)
     for (const ld of schueler.leistungsdaten) {
       leistungByKey.set(`${schueler.id}:${ld.lerngruppenID}`, ld)
     }
   }
 
   for (const change of changeStore.changes.values()) {
+    const targetSchueler = schuelerById.get(change.schuelerId)
+
+    if (
+      targetSchueler
+      && (
+        change.feld === 'fehlstundenGesamt'
+        || change.feld === 'fehlstundenUnentschuldigt'
+        || change.feld === 'lernbereichArbeitslehre'
+        || change.feld === 'lernbereichNaturwissenschaft'
+        || change.feld === 'asv'
+        || change.feld === 'aue'
+        || change.feld === 'zeugnisbemerkung'
+      )
+    ) {
+      setSchuelerfeld(change, targetSchueler)
+      continue
+    }
+
     const key = `${change.schuelerId}:${change.lerngruppenId}`
     const ld = leistungByKey.get(key)
     if (!ld) {
@@ -170,6 +372,83 @@ async function saveAsFile(content: EnmExport): Promise<void> {
   const json = `${JSON.stringify(content, null, 2)}\n`
   const filenameBase = (sourceFileName.value || 'enm.export.json').replace(/\.(gz|json)$/i, '')
   const suggestedName = `${filenameBase}.json`
+
+  await saveContentAsFile(json, suggestedName, 'ENM JSON', ['.json'])
+}
+
+function arrayBufferNachBase64(buffer: ArrayBuffer): string {
+  return window.btoa(String.fromCharCode(...new Uint8Array(buffer)))
+}
+
+function arrayBufferAusUint8Array(value: Uint8Array): ArrayBuffer {
+  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
+}
+
+async function leitenSchluesselAbFuerEncrypt(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
+  const keyMaterial = await window.crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  )
+
+  return window.crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 310_000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  )
+}
+
+async function baueEncryptedPayload(content: EnmExport): Promise<string> {
+  const normalizedPassword = encryptedSourcePassword.value.trim()
+
+  if (normalizedPassword === '') {
+    throw new Error('Verschluesselung fehlgeschlagen: Kennwort ist nicht verfuegbar.')
+  }
+
+  const enmJson = `${JSON.stringify(content, null, 2)}\n`
+  const zipBytes = zipSync({
+    'enm.json': strToU8(enmJson),
+  })
+
+  const plainZip = arrayBufferAusUint8Array(zipBytes)
+  const salt = window.crypto.getRandomValues(new Uint8Array(16)).buffer.slice(0) as ArrayBuffer
+  const iv = window.crypto.getRandomValues(new Uint8Array(12)).buffer.slice(0) as ArrayBuffer
+  const key = await leitenSchluesselAbFuerEncrypt(normalizedPassword, salt)
+  const ciphertext = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainZip)
+
+  const payload: EncryptedZipPayload = {
+    format: 'gradehub-encrypted-zip',
+    version: 1,
+    originalFileName: encryptedOriginalFileName.value,
+    salt: arrayBufferNachBase64(salt),
+    iv: arrayBufferNachBase64(iv),
+    ciphertext: arrayBufferNachBase64(ciphertext),
+  }
+
+  return `${JSON.stringify(payload, null, 2)}\n`
+}
+
+async function saveAsEncryptedFile(content: EnmExport): Promise<void> {
+  const encryptedJson = await baueEncryptedPayload(content)
+  const filenameBase = (sourceFileName.value || 'enm.export').replace(/\.(zip\.enc\.json|enc\.json|zip|gz|json)$/i, '')
+  const suggestedName = encryptedSourceFileName.value.trim() !== ''
+    ? encryptedSourceFileName.value
+    : `${filenameBase}.zip.enc.json`
+
+  await saveContentAsFile(encryptedJson, suggestedName, 'Verschluesselte ENM ZIP JSON', ['.enc.json'])
+}
+
+async function saveContentAsFile(
+  content: string,
+  suggestedName: string,
+  description: string,
+  extensions: string[],
+): Promise<void> {
+  const blob = new Blob([content], { type: 'application/json' })
 
   const picker = window as typeof window & {
     showSaveFilePicker?: (options: {
@@ -188,18 +467,17 @@ async function saveAsFile(content: EnmExport): Promise<void> {
       suggestedName,
       types: [
         {
-          description: 'ENM JSON',
-          accept: { 'application/json': ['.json'] },
+          description,
+          accept: { 'application/json': extensions },
         },
       ],
     })
     const writable = await handle.createWritable()
-    await writable.write(new Blob([json], { type: 'application/json' }))
+    await writable.write(blob)
     await writable.close()
     return
   }
 
-  const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -250,7 +528,9 @@ async function onSave(): Promise<void> {
   const confirmation = window.confirm(
     effectiveDataSource.value === 'api'
       ? 'Änderungen jetzt an den SVWS-Server zurückschreiben?'
-      : 'Änderungen jetzt als ENM-Datei speichern?',
+      : isEncryptedFileSource.value
+        ? 'Aenderungen jetzt als verschluesselte ENM-Datei speichern?'
+        : 'Änderungen jetzt als ENM-Datei speichern?',
   )
 
   if (!confirmation) {
@@ -267,6 +547,9 @@ async function onSave(): Promise<void> {
       }
       await saveToServer(exportData)
       statusMessage.value = 'Änderungen wurden erfolgreich an den SVWS-Server übertragen.'
+    } else if (isEncryptedFileSource.value) {
+      await saveAsEncryptedFile(exportData)
+      statusMessage.value = 'Aenderungen wurden als verschluesselte ENM-Datei gespeichert.'
     } else {
       await saveAsFile(exportData)
       statusMessage.value = 'Änderungen wurden als ENM-Datei gespeichert.'
@@ -275,7 +558,7 @@ async function onSave(): Promise<void> {
     enmStore.ersetzeENMDaten(exportData)
     changeStore.reset()
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.'
+    errorMessage.value = formatSaveError(error)
   } finally {
     isSaving.value = false
   }
@@ -300,18 +583,28 @@ function goBack(): void {
         <strong>{{ changeCount }}</strong>
       </p>
 
-      <p v-if="isFileSource && sourceFileName" class="source-hint">
-        Quelle: {{ sourceFileName }}
+      <p v-if="isFileSource && sourceDisplayName" class="source-hint">
+        Quelle: {{ sourceDisplayName }}
       </p>
 
       <p class="hint" v-if="effectiveDataSource === 'api'">
         Es wird ein Rückschreibe-Dialog für den SVWS-Server angeboten.
+      </p>
+      <p class="hint" v-else-if="isEncryptedFileSource">
+        Es wird eine verschluesselte ENM-Datei gespeichert.
       </p>
       <p class="hint" v-else-if="effectiveDataSource === 'file'">
         Es wird ein Dateispeicher-Dialog angeboten.
       </p>
       <p class="hint" v-else>
         Es wird ein Rückschreibe-Dialog für den SVWS-Server angeboten.
+      </p>
+
+      <p v-if="isFileSource && supportsNativeSaveDialog" class="hint">
+        Beim Speichern wird der native Speicherdialog geoeffnet; dort kann eine bestehende Datei ausgewaehlt und ueberschrieben werden.
+      </p>
+      <p v-else-if="isFileSource" class="hint">
+        Dieser Browser/Modus unterstuetzt keinen nativen Speicherdialog. Beim Speichern wird die Datei stattdessen in den Download-Ordner geladen.
       </p>
 
       <div class="actions">
@@ -322,8 +615,34 @@ function goBack(): void {
           :disabled="isSaving || changeCount === 0"
           @click="onSave"
         >
-          {{ effectiveDataSource === 'api' ? 'Zum Server speichern' : 'Datei speichern' }}
+          {{ effectiveDataSource === 'api'
+            ? 'Zum Server speichern'
+            : isEncryptedFileSource
+              ? 'Verschluesselte Datei speichern'
+              : 'Datei speichern' }}
         </button>
+      </div>
+    </section>
+
+    <section v-if="isLoaded && enmDaten && changeSummary.length > 0" class="card change-card">
+      <div class="change-card-header">
+        <h2>Änderungen</h2>
+        <span>{{ changeSummary.length }} Einträge</span>
+      </div>
+
+      <div class="change-list" role="list">
+        <article v-for="item in changeSummary" :key="item.key" class="change-item" role="listitem">
+          <div class="change-topline">
+            <strong>{{ item.schueler }}</strong>
+            <span>{{ item.kontext }}</span>
+          </div>
+          <div class="change-bottomline">
+            <span class="change-field">{{ item.feld }}</span>
+            <span>{{ item.alt }}</span>
+            <span class="change-arrow">→</span>
+            <span>{{ item.neu }}</span>
+          </div>
+        </article>
       </div>
     </section>
 
@@ -350,6 +669,11 @@ h1 {
   margin: 0;
 }
 
+h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .card {
   display: grid;
   gap: 0.75rem;
@@ -373,6 +697,63 @@ p {
   flex-wrap: wrap;
   gap: 0.6rem;
   margin-top: 0.4rem;
+}
+
+.change-card {
+  gap: 0.85rem;
+}
+
+.change-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.change-card-header span {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
+.change-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.change-item {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-surface) 92%, var(--color-primary) 8%);
+}
+
+.change-topline,
+.change-bottomline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.change-topline span,
+.change-bottomline span {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
+.change-field {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-text) !important;
+}
+
+.change-arrow {
+  color: var(--color-text) !important;
 }
 
 button {

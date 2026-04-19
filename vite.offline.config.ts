@@ -1,13 +1,34 @@
 import { fileURLToPath, URL } from 'node:url'
+import { readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
-import { viteSingleFile } from 'vite-plugin-singlefile'
 
-// Offline-Build: Alle Assets werden inline in die index.html eingebettet.
-// Dieser Build läuft korrekt über das file://-Protokoll (ohne lokalen Server).
+// Offline-Build mit dist/index.html + dist/assets.
+// Erzeugt ein klassisches IIFE-Script, damit file:// ohne ES-Module lauffaehig bleibt.
 export default defineConfig({
-  plugins: [vue(), viteSingleFile()],
+  base: './',
+  plugins: [
+    vue(),
+    {
+      name: 'offline-classic-script-html',
+      async writeBundle() {
+        const indexPath = resolve(process.cwd(), 'dist/index.html')
+        const html = await readFile(indexPath, 'utf8')
+        const rewritten = html
+          .replace(/<script[^>]*type="module"[^>]*src="\.\/assets\/app\.js"[^>]*><\/script>/, '<script defer src="./assets/app.js"></script>')
+          .replace(
+            /<link\s+rel="stylesheet"\s+crossorigin\s+href="\.\/assets\/app\.css">/,
+            '<link rel="stylesheet" href="./assets/app.css">',
+          )
+
+        if (rewritten !== html) {
+          await writeFile(indexPath, rewritten, 'utf8')
+        }
+      },
+    },
+  ],
   envPrefix: ['VITE_', 'SVWSSERVER_'],
   resolve: {
     alias: {
@@ -16,12 +37,19 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    // Alle Assets inlinen, keine externen Chunk-Dateien
-    assetsInlineLimit: 100_000_000,
+    modulePreload: false,
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        // Alles in einen einzigen Bundle – kein dynamisches Splitting
+        format: 'iife',
+        name: 'SVWSGradeHubApp',
+        entryFileNames: 'assets/app.js',
+        assetFileNames: assetInfo => {
+          if (assetInfo.name?.endsWith('.css')) {
+            return 'assets/app.css'
+          }
+          return 'assets/[name][extname]'
+        },
         inlineDynamicImports: true,
       },
     },

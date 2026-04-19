@@ -5,6 +5,8 @@ import { useRouter } from 'vue-router'
 import { strToU8, zipSync } from 'fflate'
 import { jsPDF } from 'jspdf'
 import { useAuthStore } from '@/stores/authStore'
+import { useChangeStore } from '@/stores/changeStore'
+import { useENMStore } from '@/stores/enmStore'
 import { useUIStore } from '@/stores/uiStore'
 
 interface LehrerEintrag {
@@ -17,11 +19,15 @@ interface LehrerEintrag {
 }
 
 const authStore = useAuthStore()
+const changeStore = useChangeStore()
+const enmStore = useENMStore()
 const uiStore = useUIStore()
 const router = useRouter()
 const { themePreference } = storeToRefs(uiStore)
 
 function logout(): void {
+  changeStore.reset()
+  enmStore.reset()
   authStore.clear()
   router.push('/')
 }
