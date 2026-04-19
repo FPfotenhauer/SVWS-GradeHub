@@ -67,6 +67,10 @@ const canSaveToServer = computed<boolean>(() => {
 })
 
 const isFileSource = computed<boolean>(() => effectiveDataSource.value === 'file')
+const supportsNativeSaveDialog = computed<boolean>(() => {
+  const picker = window as typeof window & { showSaveFilePicker?: unknown }
+  return typeof picker.showSaveFilePicker === 'function'
+})
 const isEncryptedFileSource = computed<boolean>(() => {
   return effectiveDataSource.value === 'file'
     && encryptedSourcePassword.value.trim() !== ''
@@ -517,6 +521,13 @@ function goBack(): void {
       </p>
       <p class="hint" v-else>
         Es wird ein Rückschreibe-Dialog für den SVWS-Server angeboten.
+      </p>
+
+      <p v-if="isFileSource && supportsNativeSaveDialog" class="hint">
+        Beim Speichern wird der native Speicherdialog geoeffnet; dort kann eine bestehende Datei ausgewaehlt und ueberschrieben werden.
+      </p>
+      <p v-else-if="isFileSource" class="hint">
+        Dieser Browser/Modus unterstuetzt keinen nativen Speicherdialog. Beim Speichern wird die Datei stattdessen in den Download-Ordner geladen.
       </p>
 
       <div class="actions">
