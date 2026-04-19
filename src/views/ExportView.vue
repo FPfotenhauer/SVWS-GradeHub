@@ -184,13 +184,16 @@ function cloneENM(data: unknown): EnmExport {
 
 function normalizeLehrerInitialPassword(next: EnmExport): void {
   for (const lehrer of next.lehrer) {
-    if (typeof lehrer.isInitialPassword === 'boolean') {
-      continue
-    }
+    const initialPassword = typeof lehrer.istInitialPassword === 'boolean'
+      ? lehrer.istInitialPassword
+      : typeof lehrer.isInitialPassword === 'boolean'
+        ? lehrer.isInitialPassword
+        : typeof lehrer.istErstanmeldung === 'boolean'
+          ? lehrer.istErstanmeldung
+          : true
 
-    lehrer.isInitialPassword = typeof lehrer.istErstanmeldung === 'boolean'
-      ? lehrer.istErstanmeldung
-      : true
+    lehrer.istInitialPassword = initialPassword
+    delete lehrer.isInitialPassword
   }
 }
 
