@@ -104,6 +104,18 @@ function cloneENM(data: unknown): EnmExport {
   return JSON.parse(JSON.stringify(data)) as EnmExport
 }
 
+function normalizeLehrerInitialPassword(next: EnmExport): void {
+  for (const lehrer of next.lehrer) {
+    if (typeof lehrer.isInitialPassword === 'boolean') {
+      continue
+    }
+
+    lehrer.isInitialPassword = typeof lehrer.istErstanmeldung === 'boolean'
+      ? lehrer.istErstanmeldung
+      : true
+  }
+}
+
 function parseNumberValue(value: string | null): number {
   if (value === null || value.trim() === '') {
     return 0
@@ -234,6 +246,7 @@ function buildRueckschreibeENM(): EnmExport {
   }
 
   const next = cloneENM(source)
+  normalizeLehrerInitialPassword(next)
   const leistungByKey = new Map<string, EnmLeistungsdaten>()
   const schuelerById = new Map<number, EnmExport['schueler'][number]>()
 

@@ -205,7 +205,7 @@ function goSave(): void {
         <h2>Klassenleitung</h2>
         <p class="hinweis">
           {{ ownLehrerKuerzel || 'Lehrkraft' }} ist Klassenleitung in folgenden Klassen.
-          Ein Klick oeffnet die Klassenleitungs-Tabelle.
+          Ein Klick öffnet die Klassenleitungs-Tabelle.
         </p>
         <div class="karten-grid">
           <RouterLink
