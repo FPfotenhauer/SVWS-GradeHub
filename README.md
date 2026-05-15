@@ -1,162 +1,262 @@
 # SVWS-GradeHub
 
-SVWS-GradeHub ist ein leichtgewichtiges, browserbasiertes Notenmodul für Lehrkräfte, das sowohl online als auch offline im Browser funktioniert. Das Projekt unterstützt den Dateiimport von ENM-Daten, die Anzeige und Bearbeitung von Noten sowie den Rückschreibevorgang über die SVWS-API.
+Browserbasiertes Notenmodul für Lehrkräfte mit SVWS-Anbindung. Unterstützt zwei Betriebsmodi: als reine Offline-App (`file://`) und als Serveranwendung mit E-Mail-Versand.
 
-## 🚀 Hauptmerkmale
+> Dieses Dokument richtet sich an Entwickler und Administratoren. Eine Benutzeranleitung für Lehrkräfte befindet sich unter `docs/`.
 
-- Vollständig client-seitig: Läuft direkt im Browser ohne eigenes Backend
-- Offline-fähig per `file://` oder statischem Webserver
-- ENM-Dateiimport und SVWS-REST-Anbindung
-- Noten- und Leistungsdatenverwaltung mit Änderungs-Puffer
-- Verschlüsselung per Web Crypto API im Secure Context
-- Zustandstrennung: Originaldaten unverändert, alle Änderungen im Pinia-Change-Store
-- Vue 3 + TypeScript + Vite + Pinia + Vue Router + `fflate`
+---
 
-## 📁 Projektstruktur
+## Betriebsmodi
 
-- `src/`
-  - `components/` — wiederverwendbare Vue-Komponenten
-  - `composables/` — Logik für Deployment-Modus, API-Zugriff, Krypto
-  - `router/` — Hash-basiertes Routing
-  - `stores/` — Pinia-Stores für ENM-Daten, Änderungen, Authentifizierung und UI
-  - `types/` — TypeScript-Typen für ENM und Änderungsmodelle
-  - `views/` — Seiten: Start, Lerngruppen, Noten-Eingabe, Export
-- `data/` — Beispiel- / Testdaten
-- `docs/` — Projekt-Dokumentation und ADRs
+### Offline-Modus (`file://`)
 
-## 🧩 Architekturprinzipien
+Die App läuft vollständig im Browser ohne eigenes Backend. Lehrkräfte öffnen `dist/index.html` direkt. Der Bereich „Vom SVWS-Server laden" wird über `config.js` gesteuert (siehe [Laufzeit-Konfiguration](#laufzeit-konfiguration)).
 
-- Browser-first: Keine Daten werden ohne explizite Nutzeraktion an externe Server gesendet
-- Original-ENM-Daten bleiben unverändert
-- Änderungen werden als separate Change-Objekte gespeichert
-- Router arbeitet ausschließlich im Hash-Modus für Offline-Kompatibilität
-- Verschlüsselung nutzt nur die native Web Crypto API
+### Server-Modus (`http://` / `https://`)
 
-## ⚙️ Technologie-Stack
+Mit dem enthaltenen `server.js` (Express) werden zusätzlich API-Endpunkte bereitgestellt:
 
-- Vue 3 (Composition API)
-- TypeScript (strict)
-- Vite
-- Pinia
-- Vue Router (Hash Mode)
-- fflate (gzip)
-- Web Crypto API für AES-256-GCM
-- Vitest für Unit-Tests
-- ESLint für statische Analyse
+- `POST /api/mail/test` — SMTP-Verbindung testen
+- `POST /api/mail/send` — verschlüsselte Notendatei per E-Mail versenden
 
-## 🧪 Entwickeln & Testen
+Im Server-Modus erscheint im Admin-Bereich der Button **Dateien versenden**.
 
-### Abhängigkeiten installieren
+---
+
+## Technologie-Stack
+
+**Frontend**
+- Vue 3 (Composition API) + TypeScript (strict)
+- Vite, Pinia, Vue Router (Hash Mode)
+- fflate (ZIP/gzip), jsPDF, Web Crypto API (AES-256-GCM, RSA-OAEP)
+
+**Backend** (nur Server-Modus)
+- Node.js + Express 5
+- Nodemailer
+
+**Entwicklung**
+- Vitest, ESLint, concurrently
+
+---
+
+## Projektstruktur
+
+```
+├── src/
+│   ├── components/     — wiederverwendbare Vue-Komponenten
+│   ├── router/         — Hash-basiertes Routing
+│   ├── stores/         — Pinia-Stores (ENM, Änderungen, Auth, UI)
+│   ├── types/          — TypeScript-Typen für ENM und Änderungsmodelle
+│   └── views/          — Seiten (Start, Lerngruppen, Notenerfassung, Admin)
+├── public/
+│   └── config.js       — Laufzeit-Konfiguration (wird nach dist/ kopiert)
+├── data/               — Beispiel- und Testdaten
+├── docs/               — Projektdokumentation und ADRs
+├── server.js           — Express-Backend für E-Mail-Versand
+├── vite.config.ts      — Vite-Konfiguration (Webserver-Build)
+├── vite.offline.config.ts — Vite-Konfiguration (Offline-Build, IIFE)
+├── .env                — Lokale Konfiguration (nicht im Repository)
+└── .env.example        — Vorlage für .env
+```
+
+---
+
+## Lokale Entwicklung
+
+### Voraussetzungen
+
+- Node.js ≥ 20
+- npm
+
+### Setup
 
 ```bash
 npm install
 ```
 
-### Lokale Entwicklung starten
+Konfigurationsdatei anlegen (optional):
 
+```bash
+cp .env.example .env
+```
+
+### Entwicklungsserver starten
+
+**Nur Frontend** (kein E-Mail-Versand):
 ```bash
 npm run dev
 ```
 
-### Build erzeugen (Standard)
-
+**Frontend + Backend** (mit E-Mail-Versand):
 ```bash
-npm run build
+npm run dev:full
 ```
 
-Dieser Build ist fuer `file://` optimiert und erzeugt in `dist/` eine `index.html` sowie den Ordner `assets/` mit:
+Vite läuft auf Port 5173, das Backend auf Port 3000. `/api`-Anfragen werden automatisch weitergeleitet.
 
-- `assets/app.js`
-- `assets/app.css`
+### Weitere Befehle
 
-Geeignet fuer Deployment auf statischem Webserver und fuer den direkten Start von `dist/index.html` im Browser.
+| Befehl | Beschreibung |
+|---|---|
+| `npm run build` | Offline-Build (IIFE, `file://`-kompatibel) |
+| `npm run build:web` | Webserver-Build (ES-Module) |
+| `npm run typecheck` | TypeScript-Prüfung |
+| `npm run test` | Unit-Tests (Vitest) |
+| `npm run lint` | ESLint |
+| `npm run preview` | Build-Vorschau |
 
-Optionaler Webserver-Build (ES-Module):
+---
+
+## Laufzeit-Konfiguration
+
+### `public/config.js`
+
+Wird von Vite nach `dist/config.js` kopiert und zur Laufzeit geladen — funktioniert auch mit `file://`. Die Datei kann nach dem Build bearbeitet werden, ohne neu zu bauen.
+
+```js
+window.GRADEHUB_CONFIG = {
+  // admintoolVisible: true,  // Auskommentiert = .env wird ausgewertet (nur Dev)
+}
+```
+
+- `admintoolVisible: true` → Bereich „Vom SVWS-Server laden" sichtbar (Admin-Modus)
+- `admintoolVisible: false` → ausgeblendet (Lehrkraft-Modus)
+- Auskommentiert im Build → immer `false`; im Dev-Server → Wert aus `.env`
+
+### `.env`
+
+Nur zur Build-Zeit und im Dev-Server ausgewertet. Vorlage: `.env.example`.
+
+```env
+SVWSSERVER_HOST=localhost
+SVWSSERVER_PORT=8443
+SVWSSERVER_SCHEMA=svwsdb
+SVWSSERVER_USER=Admin
+SVWSSERVER_PASSWORD=
+
+# Auf false setzen, um den Bereich "Vom SVWS-Server laden" auszublenden
+ADMINTOOL_VISIBLE=false
+```
+
+---
+
+## Admin-Bereich
+
+Der Admin-Bereich (`/admin`) ist für Schulleitungen und Notenkoordinatoren gedacht. Er ermöglicht:
+
+- Lehrerliste mit Notenpasswörtern und dienstlichen E-Mail-Adressen (aus `/db/{schema}/lehrer/{id}/stammdaten`)
+- Generierung und Verwaltung von RSA-Schlüsselpaaren
+- Erstellung verschlüsselter Notendateien (AES-256-GCM, `.enc.json`)
+- Versand der Dateien per E-Mail (nur im Server-Modus)
+- Speichern und Laden der Admin-Konfiguration (`.ghb`, verschlüsselt)
+
+Die SMTP-Konfiguration wird verschlüsselt in der `.ghb`-Datei gespeichert.
+
+---
+
+## SVWS-API-Endpunkte
+
+| Methode | Pfad | Verwendung |
+|---|---|---|
+| GET | `/db/{schema}/lehrer` | Lehrerliste laden |
+| GET | `/db/{schema}/lehrer/{id}/stammdaten` | Dienstliche E-Mail-Adresse |
+| GET | `/db/{schema}/enm/v2/lehrer/{id}` | ENM-Daten einer Lehrkraft |
+| POST | `/db/{schema}/enm/v2/import` | Noten zurückschreiben |
+
+Authentifizierung: Basic Auth (`Authorization: Basic <base64(user:pass)>`).
+
+---
+
+## Installation auf einem Server
+
+### Voraussetzungen
+
+- Node.js ≥ 20 auf dem Server
+- Schreibzugriff auf einen SMTP-Server
+
+### Build erstellen
 
 ```bash
 npm run build:web
 ```
 
-### Offline-Build fuer file:// erzeugen
+### Dateien auf den Server übertragen
 
-```bash
-npm run build:offline
+Folgende Dateien werden benötigt (kein `node_modules`):
+
+```
+dist/
+server.js
+package.json
+package-lock.json
 ```
 
-`build:offline` ist ein Alias auf `npm run build`.
-
-Kurzform:
+### Auf dem Server einrichten
 
 ```bash
-npm run offline
+npm install --omit=dev
 ```
 
-`npm run offline` nutzt den Standard-Build mit folgender Struktur in `dist/`:
-`npm run offline` nutzt denselben Standard-Build wie `npm run build` (ein Befehl fuer den Alltag) mit folgender Struktur in `dist/`:
-
-- `index.html`
-- `assets/app.js`
-- `assets/app.css`
-
-Hinweis: Der JS-Bundle wird als ES-Modul geladen. Das ist erforderlich, weil enthaltene Abhaengigkeiten `import.meta.url` verwenden.
-
-### Vorschau des Builds
+### Server starten
 
 ```bash
-npm run preview
+node server.js
 ```
 
-### Type-Check
+oder mit dem npm-Skript:
 
 ```bash
-npm run typecheck
+npm start
 ```
 
-### Tests ausführen
+Der Server läuft standardmäßig auf Port 3000. Der Port kann über die Umgebungsvariable `PORT` geändert werden:
 
 ```bash
-npm run test
+PORT=8080 node server.js
 ```
 
-### Linting
+`server.js` liefert die `dist/`-Dateien aus und stellt die `/api`-Endpunkte bereit — kein separater Webserver nötig.
+
+### Dauerhafter Betrieb (empfohlen)
+
+Für den produktiven Betrieb empfiehlt sich ein Prozessmanager:
 
 ```bash
-npm run lint
+npm install -g pm2
+pm2 start server.js --name gradehub
+pm2 save
+pm2 startup
 ```
 
-## 🔐 SVWS-Integration
+### Reverse Proxy (optional)
 
-Die App unterstützt:
+Wenn der Server hinter nginx oder Apache betrieben wird:
 
-- `GET {baseUrl}/db/{schema}/enm/v2/lehrer/{id}`
-- `POST {baseUrl}/db/{schema}/enm/v2/import`
+**nginx:**
+```nginx
+location / {
+    proxy_pass http://localhost:3000;
+    proxy_set_header Host $host;
+}
+```
 
-Authentifizierung erfolgt per Basic Auth mit `Authorization: Basic <base64(username:password)>`.
+---
 
-## 📌 Betriebsmodus
+## Architekturprinzipien
 
-Das Projekt unterscheidet zwischen:
+- ENM-Originaldaten werden nicht mutiert — alle Änderungen landen im Pinia-Change-Store
+- Verschlüsselung ausschließlich über die native Web Crypto API (kein externes Crypto-Framework)
+- Der Offline-Build erzeugt ein IIFE-Bundle, das ohne ES-Module-Support (`file://`) läuft
+- `config.js` ermöglicht Laufzeit-Konfiguration ohne Rebuild
+- Das Backend hält keine Sitzungen und keinen Zustand — alle Nutzdaten kommen aus dem Frontend
 
-- `https://` oder `http://` mit vollständigem Feature-Satz
-- `file://`-Modus mit eingeschränkter Verschlüsselung, aber vollem Offline-Einsatz
+---
 
-## 🧠 Wichtiges Design-Muster
+## Lizenz
 
-Die App verwendet einen Change-Buffer, der Änderungen als `LeistungsChange`-Objekte speichert. Das bedeutet:
+[BSD 3-Clause License](LICENSE)
 
-- Originaldaten aus der ENM-Datei werden nicht mutiert
-- Änderungen können gesammelt, angezeigt und gezielt zurückgeschrieben werden
-- Jede Änderung erhält einen `geaendertAm`-Timestamp und `geaendertVon`
+## Weitere Dokumentation
 
-## 📝 Lizenz
-
-Dieses Projekt ist unter der [BSD 3 License](LICENSE) lizenziert.
-
-## 📚 Weitere Dokumentation
-
-- `docs/index.md`
-- `docs/adr/` für Architekturentscheidungen
-
-## Kontakt
-
-Bei Fragen oder Verbesserungsvorschlägen kannst du gerne Issues oder Pull Requests öffnen.
+- `docs/adr/` — Architekturentscheidungen (ADRs)
+- `docs/` — Benutzeranleitung (in Vorbereitung)
