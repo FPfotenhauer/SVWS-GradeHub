@@ -61,6 +61,12 @@ const selectedLehrerId = ref<number | null>(null)
 const serverCardOpen = ref<boolean>(true)
 const fileCardOpen = ref<boolean>(true)
 
+type GradeHubConfig = { admintoolVisible?: boolean }
+const runtimeConfig = (window as Window & { GRADEHUB_CONFIG?: GradeHubConfig }).GRADEHUB_CONFIG
+const admintoolVisible = runtimeConfig?.admintoolVisible !== undefined
+  ? runtimeConfig.admintoolVisible === true
+  : import.meta.env.DEV && envString('ADMINTOOL_VISIBLE').toLowerCase() === 'true'
+
 type EncryptedZipPayload = {
   format: 'gradehub-encrypted-zip'
   version: number
@@ -410,7 +416,7 @@ function oeffneAdmin(): void {
   <main class="start-view">
     <h1>SVWS-GradeHub</h1>
 
-    <section class="card">
+    <section v-if="admintoolVisible" class="card">
       <button class="card-toggle" type="button" @click="serverCardOpen = !serverCardOpen">
         <h2>Vom SVWS-Server laden</h2>
         <span>{{ serverCardOpen ? 'Einklappen' : 'Ausklappen' }}</span>

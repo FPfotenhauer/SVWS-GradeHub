@@ -29,7 +29,7 @@ export default defineConfig({
       },
     },
   ],
-  envPrefix: ['VITE_', 'SVWSSERVER_'],
+  envPrefix: ['VITE_', 'SVWSSERVER_', 'ADMINTOOL_'],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
