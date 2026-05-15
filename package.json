@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "node server.js",
     "dev:offline": "vite --config vite.offline.config.ts",
     "build": "vue-tsc --noEmit && vite build --config vite.offline.config.ts",
     "build:web": "vue-tsc --noEmit && vite build",
@@ -16,15 +17,19 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "express": "^5.2.1",
     "fflate": "^0.8.2",
     "jspdf": "^4.2.1",
+    "nodemailer": "^8.0.7",
     "pinia": "^2.1.7",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^8.0.0",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
     "@typescript-eslint/parser": "^8.15.0",
     "@vitejs/plugin-vue": "^5.2.0",

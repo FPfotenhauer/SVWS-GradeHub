@@ -14,6 +14,7 @@ interface LehrerEintrag {
   kuerzel: string
   nachname: string
   vorname: string
+  emailDienstlich: string
   notenpasswort: string
   istAktiv: boolean
 }
@@ -39,23 +40,27 @@ function onThemeChange(event: Event): void {
   }
 }
 
+const läuftAufServer = window.location.protocol === 'http:' || window.location.protocol === 'https:'
+
 const isLoading = ref<boolean>(false)
 const errorMessage = ref<string>('')
 const lehrer = ref<LehrerEintrag[]>([])
 const ausgewaehlt = ref<Set<number>>(new Set())
 const nurAktive = ref<boolean>(true)
 
-type SpaltenKey = 'kuerzel' | 'name' | 'passwort'
+type SpaltenKey = 'kuerzel' | 'name' | 'email' | 'passwort'
 
 const spaltenBreiten = ref<Record<SpaltenKey, number>>({
   kuerzel: 96,
   name: 240,
+  email: 220,
   passwort: 260,
 })
 
 const minBreiten: Record<SpaltenKey, number> = {
   kuerzel: 32,
   name: 72,
+  email: 60,
   passwort: 60,
 }
 
@@ -96,9 +101,45 @@ function mapLehrer(value: unknown): LehrerEintrag | null {
     kuerzel,
     nachname: typeof nachname === 'string' ? nachname : '',
     vorname: typeof vorname === 'string' ? vorname : '',
+    emailDienstlich: '',
     notenpasswort: typeof notenpasswortRaw === 'string' ? notenpasswortRaw : '',
     istAktiv: typeof istAktivRaw === 'boolean' ? istAktivRaw : true,
   }
+}
+
+async function ladeEmailAdressen(): Promise<void> {
+  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
+  const results = await Promise.allSettled(
+    lehrer.value.map(async (eintrag) => {
+      const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/lehrer/${eintrag.id}/stammdaten`
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          Authorization: encodeBasicAuth(authStore.username, authStore.password),
+          Accept: 'application/json',
+        },
+      })
+      if (!response.ok) return { id: eintrag.id, email: '' }
+      const data: unknown = await response.json()
+      if (!isRecord(data)) return { id: eintrag.id, email: '' }
+      return {
+        id: eintrag.id,
+        email: typeof data.emailDienstlich === 'string' ? data.emailDienstlich : '',
+      }
+    }),
+  )
+
+  const emailMap = new Map<number, string>()
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      emailMap.set(result.value.id, result.value.email)
+    }
+  }
+
+  lehrer.value = lehrer.value.map((eintrag) => ({
+    ...eintrag,
+    emailDienstlich: emailMap.get(eintrag.id) ?? '',
+  }))
 }
 
 async function ladeLehrerListe(): Promise<void> {
@@ -134,6 +175,7 @@ async function ladeLehrerListe(): Promise<void> {
     }
 
     lehrer.value = data.map(mapLehrer).filter((l): l is LehrerEintrag => l !== null)
+    void ladeEmailAdressen()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'Lehrerliste konnte nicht geladen werden.'
   } finally {
@@ -583,6 +625,14 @@ async function fuehreSpeichernDurch(): Promise<void> {
         privat: privaterSchluesselPem.value || null,
       },
       lehrer: lehrer.value.map((l) => ({ id: l.id, kuerzel: l.kuerzel, notenpasswort: l.notenpasswort })),
+      smtp: smtpHost.value.trim() !== '' ? {
+        host: smtpHost.value.trim(),
+        port: parseInt(smtpPort.value, 10) || 587,
+        user: smtpUser.value,
+        password: smtpPassword.value,
+        from: smtpFrom.value,
+        tls: smtpTls.value,
+      } : null,
     }
     const encrypted = await aesVerschluesseln(JSON.stringify(daten, null, 2), speichernKennwort.value)
     const blob = new Blob([encrypted], { type: 'application/json' })
@@ -650,6 +700,7 @@ async function fuehreLabenDurch(): Promise<void> {
     const daten = JSON.parse(plaintext) as {
       schluessel: { oeffentlich: string | null; privat: string | null }
       lehrer: { id: number; kuerzel: string; notenpasswort: string }[]
+      smtp?: { host: string; port: number; user: string; password: string; from: string; tls: boolean } | null
     }
     oeffentlicherSchluesselPem.value = daten.schluessel.oeffentlich ?? ''
     privaterSchluesselPem.value = daten.schluessel.privat ?? ''
@@ -659,11 +710,191 @@ async function fuehreLabenDurch(): Promise<void> {
       ...l,
       notenpasswort: passwortMap.get(l.id) ?? l.notenpasswort,
     }))
+    if (daten.smtp) {
+      smtpHost.value = daten.smtp.host
+      smtpPort.value = String(daten.smtp.port)
+      smtpUser.value = daten.smtp.user
+      smtpPassword.value = daten.smtp.password
+      smtpFrom.value = daten.smtp.from
+      smtpTls.value = daten.smtp.tls
+    }
     ladenModalOffen.value = false
   } catch {
     ladenFehler.value = 'Entschlüsselung fehlgeschlagen. Falsches Kennwort oder beschädigte Datei.'
   } finally {
     ladenLaeuft.value = false
+  }
+}
+
+// --- Versand ---
+type VersandErgebnis = { kuerzel: string; email: string; erfolg: boolean; meldung: string }
+
+const versandModalOffen = ref<boolean>(false)
+const versandErgebnisse = ref<VersandErgebnis[]>([])
+const versandLaeuft = ref<boolean>(false)
+const versandFortschritt = ref<number>(0)
+const versandGesamt = ref<number>(0)
+
+function schliesseVersandModal(): void {
+  if (!versandLaeuft.value) versandModalOffen.value = false
+}
+
+async function versendeDateienFuerAuswahl(): Promise<void> {
+  errorMessage.value = ''
+
+  if (ausgewaehlt.value.size === 0) {
+    errorMessage.value = 'Bitte mindestens eine Lehrkraft auswählen.'
+    return
+  }
+  if (!smtpHost.value.trim()) {
+    errorMessage.value = 'Bitte zuerst einen E-Mail-Server konfigurieren.'
+    return
+  }
+  if (!oeffentlicherSchluesselPem.value) {
+    errorMessage.value = 'Bitte zuerst ein Schlüsselpaar erzeugen (öffentlicher Schlüssel fehlt).'
+    return
+  }
+
+  const ausgewaehlteLehrer = lehrer.value.filter((eintrag) => ausgewaehlt.value.has(eintrag.id))
+  const ohneNotenpasswort = ausgewaehlteLehrer.filter((eintrag) => eintrag.notenpasswort.trim() === '')
+  if (ohneNotenpasswort.length > 0) {
+    errorMessage.value = `Für folgende Lehrkräfte fehlt ein Notenpasswort: ${ohneNotenpasswort.map((l) => l.kuerzel).join(', ')}`
+    return
+  }
+  const ohneEmail = ausgewaehlteLehrer.filter((eintrag) => eintrag.emailDienstlich.trim() === '')
+  if (ohneEmail.length > 0) {
+    errorMessage.value = `Für folgende Lehrkräfte fehlt eine E-Mail-Adresse: ${ohneEmail.map((l) => l.kuerzel).join(', ')}`
+    return
+  }
+
+  versandErgebnisse.value = []
+  versandFortschritt.value = 0
+  versandGesamt.value = ausgewaehlteLehrer.length
+  versandLaeuft.value = true
+  versandModalOffen.value = true
+  isLoading.value = true
+
+  const smtpKonfig = {
+    host: smtpHost.value.trim(),
+    port: parseInt(smtpPort.value, 10) || 587,
+    user: smtpUser.value,
+    password: smtpPassword.value,
+    from: smtpFrom.value,
+    tls: smtpTls.value,
+  }
+
+  for (const eintrag of ausgewaehlteLehrer) {
+    try {
+      const enmJson = await ladeENMJsonFuerLehrer(eintrag.id)
+      const zipBytes = zipSync({
+        'enm.json': strToU8(enmJson),
+        'public_key.pem': strToU8(oeffentlicherSchluesselPem.value),
+      })
+      const zipFileName = `${eintrag.kuerzel || `lehrer-${eintrag.id}`}-enm.zip`
+      const verschluesselt = await aesVerschluesselnBytes(
+        arrayBufferAusUint8Array(zipBytes),
+        eintrag.notenpasswort,
+        zipFileName,
+      )
+      const dateiname = `${zipFileName}.enc.json`
+
+      const response = await fetch('/api/mail/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: eintrag.emailDienstlich, filename: dateiname, content: verschluesselt, smtp: smtpKonfig }),
+      })
+
+      const text = await response.text()
+      versandErgebnisse.value.push({
+        kuerzel: eintrag.kuerzel,
+        email: eintrag.emailDienstlich,
+        erfolg: response.ok,
+        meldung: response.ok ? 'Gesendet.' : (text || `Fehler ${response.status}`),
+      })
+    } catch (error) {
+      versandErgebnisse.value.push({
+        kuerzel: eintrag.kuerzel,
+        email: eintrag.emailDienstlich,
+        erfolg: false,
+        meldung: error instanceof Error ? error.message : 'Unbekannter Fehler.',
+      })
+    }
+    versandFortschritt.value += 1
+  }
+
+  versandLaeuft.value = false
+  isLoading.value = false
+}
+
+// --- SMTP-Modal ---
+const smtpModalOffen = ref<boolean>(false)
+const smtpFehler = ref<string>('')
+const smtpHost = ref<string>('')
+const smtpPort = ref<string>('587')
+const smtpUser = ref<string>('')
+const smtpPassword = ref<string>('')
+const smtpFrom = ref<string>('')
+const smtpTls = ref<boolean>(true)
+
+function oeffneSmtpModal(): void {
+  smtpFehler.value = ''
+  smtpModalOffen.value = true
+}
+
+function schliesseSmtpModal(): void {
+  smtpModalOffen.value = false
+}
+
+function speichereSmtpKonfiguration(): void {
+  if (!smtpHost.value.trim()) {
+    smtpFehler.value = 'Bitte einen SMTP-Server angeben.'
+    return
+  }
+  smtpFehler.value = ''
+  smtpModalOffen.value = false
+}
+
+const smtpTestLaeuft = ref<boolean>(false)
+const smtpTestErfolg = ref<boolean | null>(null)
+const smtpTestMeldung = ref<string>('')
+
+async function testeSmtpVerbindung(): Promise<void> {
+  if (!smtpHost.value.trim()) {
+    smtpFehler.value = 'Bitte einen SMTP-Server angeben.'
+    return
+  }
+  smtpFehler.value = ''
+  smtpTestLaeuft.value = true
+  smtpTestErfolg.value = null
+  smtpTestMeldung.value = ''
+
+  try {
+    const response = await fetch('/api/mail/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        host: smtpHost.value.trim(),
+        port: parseInt(smtpPort.value, 10) || 587,
+        user: smtpUser.value,
+        password: smtpPassword.value,
+        from: smtpFrom.value,
+        tls: smtpTls.value,
+      }),
+    })
+
+    if (response.ok) {
+      smtpTestErfolg.value = true
+      smtpTestMeldung.value = 'Verbindung erfolgreich.'
+    } else {
+      const text = await response.text()
+      smtpTestErfolg.value = false
+      smtpTestMeldung.value = text || `Verbindung fehlgeschlagen (${response.status}).`
+    }
+  } catch {
+    smtpTestErfolg.value = false
+    smtpTestMeldung.value = 'Server nicht erreichbar. Ist das Backend gestartet?'
+  } finally {
+    smtpTestLaeuft.value = false
   }
 }
 
@@ -762,6 +993,15 @@ onUnmounted(() => {
             Dateien erzeugen
           </button>
           <button
+            v-if="läuftAufServer"
+            class="btn-generate"
+            type="button"
+            :disabled="ausgewaehlt.size === 0 || versandLaeuft"
+            @click="versendeDateienFuerAuswahl"
+          >
+            Dateien versenden
+          </button>
+          <button
             class="btn-generate"
             type="button"
             @click="speichern"
@@ -774,6 +1014,14 @@ onUnmounted(() => {
             @click="laden"
           >
             Laden
+          </button>
+          <button
+            v-if="läuftAufServer"
+            class="btn-generate"
+            type="button"
+            @click="oeffneSmtpModal"
+          >
+            E-Mail-Server
           </button>
           <button
             class="btn-generate"
@@ -799,6 +1047,7 @@ onUnmounted(() => {
             <col class="col-check" />
             <col :style="spaltenStil('kuerzel')" />
             <col :style="spaltenStil('name')" />
+            <col :style="spaltenStil('email')" />
             <col :style="spaltenStil('passwort')" />
           </colgroup>
           <thead>
@@ -819,6 +1068,10 @@ onUnmounted(() => {
                 Name, Vorname
                 <span class="resize-handle" @mousedown="starteResize('name', $event)" />
               </th>
+              <th class="col-email">
+                E-Mail (dienstlich)
+                <span class="resize-handle" @mousedown="starteResize('email', $event)" />
+              </th>
               <th class="col-passwort">
                 Notenpasswort
                 <span class="resize-handle" @mousedown="starteResize('passwort', $event)" />
@@ -827,7 +1080,7 @@ onUnmounted(() => {
           </thead>
           <tfoot>
             <tr>
-              <td colspan="4" class="tfoot-cell">
+              <td colspan="5" class="tfoot-cell">
                 <span v-if="ausgewaehlt.size > 0">
                   {{ ausgewaehlt.size }} Lehrkraft{{ ausgewaehlt.size !== 1 ? 'kräfte' : '' }} ausgewählt
                 </span>
@@ -852,6 +1105,7 @@ onUnmounted(() => {
               </td>
               <td class="col-kuerzel">{{ l.kuerzel }}</td>
               <td class="col-name">{{ l.nachname }}, {{ l.vorname }}</td>
+              <td class="col-email">{{ l.emailDienstlich }}</td>
               <td class="col-passwort">
                 <div class="col-passwort-inhalt">
                   <span class="passwort-text">{{ l.notenpasswort || '-' }}</span>
@@ -1012,6 +1266,74 @@ onUnmounted(() => {
           >
             {{ ladenLaeuft ? 'Wird geladen…' : 'Laden' }}
           </button>
+        </div>
+      </div>
+    </div>
+    <!-- Versand-Modal -->
+    <div v-if="versandModalOffen" class="modal-backdrop" @click.self="schliesseVersandModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="versand-modal-title">
+        <div class="modal-header">
+          <h2 id="versand-modal-title">Dateien versenden</h2>
+          <button class="modal-close" type="button" :disabled="versandLaeuft" aria-label="Schließen" @click="schliesseVersandModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-meta">
+            <template v-if="versandLaeuft">{{ versandFortschritt }} / {{ versandGesamt }} wird versendet…</template>
+            <template v-else>{{ versandErgebnisse.filter(e => e.erfolg).length }} von {{ versandGesamt }} erfolgreich gesendet.</template>
+          </p>
+          <div class="versand-liste">
+            <div
+              v-for="ergebnis in versandErgebnisse"
+              :key="ergebnis.kuerzel"
+              class="versand-eintrag"
+              :class="ergebnis.erfolg ? 'versand-ok' : 'versand-fehler'"
+            >
+              <span class="versand-kuerzel">{{ ergebnis.kuerzel }}</span>
+              <span class="versand-email">{{ ergebnis.email }}</span>
+              <span class="versand-meldung">{{ ergebnis.meldung }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-generate btn-generate--aktiv" type="button" :disabled="versandLaeuft" @click="schliesseVersandModal">Schließen</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SMTP-Modal -->
+    <div v-if="smtpModalOffen" class="modal-backdrop" @click.self="schliesseSmtpModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="smtp-modal-title">
+        <div class="modal-header">
+          <h2 id="smtp-modal-title">E-Mail-Server konfigurieren</h2>
+          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSmtpModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-meta">Die SMTP-Daten werden beim Speichern in der Konfigurationsdatei verschlüsselt abgelegt.</p>
+          <p v-if="smtpFehler" class="error">{{ smtpFehler }}</p>
+          <label class="modal-form-label" for="smtp-host">SMTP-Server</label>
+          <input id="smtp-host" v-model="smtpHost" class="modal-input" type="text" placeholder="mail.schule.de" />
+          <label class="modal-form-label" for="smtp-port">Port</label>
+          <input id="smtp-port" v-model="smtpPort" class="modal-input" type="number" placeholder="587" />
+          <label class="modal-form-label" for="smtp-user">Benutzername</label>
+          <input id="smtp-user" v-model="smtpUser" class="modal-input" type="text" autocomplete="username" placeholder="noten@schule.de" />
+          <label class="modal-form-label" for="smtp-password">Passwort</label>
+          <input id="smtp-password" v-model="smtpPassword" class="modal-input" type="password" autocomplete="current-password" />
+          <label class="modal-form-label" for="smtp-from">Absenderadresse</label>
+          <input id="smtp-from" v-model="smtpFrom" class="modal-input" type="email" placeholder="noten@schule.de" />
+          <label class="toggle-label">
+            <input v-model="smtpTls" type="checkbox" />
+            TLS/STARTTLS verwenden
+          </label>
+          <div v-if="smtpTestErfolg !== null" :class="smtpTestErfolg ? 'smtp-test-ok' : 'smtp-test-fehler'">
+            {{ smtpTestMeldung }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-generate" type="button" @click="schliesseSmtpModal">Abbrechen</button>
+          <button class="btn-generate" type="button" :disabled="smtpTestLaeuft" @click="testeSmtpVerbindung">
+            {{ smtpTestLaeuft ? 'Teste…' : 'Verbindung testen' }}
+          </button>
+          <button class="btn-generate btn-generate--aktiv" type="button" @click="speichereSmtpKonfiguration">Übernehmen</button>
         </div>
       </div>
     </div>
@@ -1563,5 +1885,67 @@ td.col-check input[type='checkbox'] {
 
 .modal-file-input {
   display: none;
+}
+
+.versand-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.versand-eintrag {
+  display: grid;
+  grid-template-columns: 4rem 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.35rem;
+  font-size: 0.88rem;
+}
+
+.versand-ok {
+  color: #166534;
+  background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #16a34a 30%, transparent);
+}
+
+.versand-fehler {
+  color: var(--color-error, #dc2626);
+  background: color-mix(in srgb, var(--color-error, #dc2626) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 30%, transparent);
+}
+
+.versand-kuerzel {
+  font-weight: 600;
+  font-family: 'Noto Sans Mono', 'Courier New', monospace;
+}
+
+.versand-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.versand-meldung {
+  white-space: nowrap;
+}
+
+.smtp-test-ok,
+.smtp-test-fehler {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.4rem;
+  font-size: 0.88rem;
+}
+
+.smtp-test-ok {
+  color: #166534;
+  background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, #16a34a 30%, transparent);
+}
+
+.smtp-test-fehler {
+  color: var(--color-error, #dc2626);
+  background: color-mix(in srgb, var(--color-error, #dc2626) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 30%, transparent);
 }
 </style>

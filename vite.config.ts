@@ -31,13 +31,18 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000',
+    },
+  },
   build: {
     rollupOptions: {
       output: {
         entryFileNames: 'assets/app.js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: assetInfo => {
-          if (assetInfo.name?.endsWith('.css')) {
+          if (assetInfo.names?.some(n => n.endsWith('.css'))) {
             return 'assets/app.css'
           }
           return 'assets/[name][extname]'
