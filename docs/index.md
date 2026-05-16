@@ -8,6 +8,7 @@ Dieses Handbuch erklärt die wichtigsten Schritte zur Nutzung von SVWS-GradeHub 
 - [Dateien auswählen und Daten laden](./datei-auswahl.md)
 - [Bedienung des Notenmoduls](./bedienung.md)
 - [Adminbereich: Notendateien erstellen, versenden und importieren](./admin.md)
+- [Admin-Tutorial (Schritt fuer Schritt mit Screenshots)](./admin-tutorial.md)
 - [Datenschutzhinweise](./datenschutz.md)
 
 ---
