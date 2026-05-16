@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { unzipSync, strFromU8 } from 'fflate'
+import { marked } from 'marked'
+import datenschutzMd from '../../docs/datenschutz.md?raw'
 
 import { useAuthStore } from '@/stores/authStore'
 import { useENMStore } from '@/stores/enmStore'
@@ -77,6 +79,9 @@ type EncryptedZipPayload = {
   iv: string
   ciphertext: string
 }
+
+const datenschutzModalOffen = ref<boolean>(false)
+const datenschutzHtml = marked.parse(datenschutzMd) as string
 
 const entschluesselnModalOffen = ref<boolean>(false)
 const entschluesselnKennwort = ref<string>('')
@@ -512,8 +517,26 @@ function oeffneAdmin(): void {
       </div>
     </div>
 
+    <div v-if="datenschutzModalOffen" class="modal-backdrop" @click.self="datenschutzModalOffen = false">
+      <div class="modal modal--datenschutz" role="dialog" aria-modal="true" aria-labelledby="datenschutz-modal-title">
+        <div class="modal-header">
+          <h2 id="datenschutz-modal-title">Datenschutzhinweise</h2>
+          <button class="modal-close" type="button" aria-label="Schließen" @click="datenschutzModalOffen = false">✕</button>
+        </div>
+        <div class="modal-body modal-body--scroll" v-html="datenschutzHtml" />
+        <div class="modal-footer">
+          <button type="button" @click="datenschutzModalOffen = false">Schließen</button>
+        </div>
+      </div>
+    </div>
+
     <p v-if="statusMessage" class="status">{{ statusMessage }}</p>
     <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+
+    <footer class="app-footer">
+      <a class="link-button" href="https://fpfotenhauer.github.io/SVWS-GradeHub/" target="_blank" rel="noopener noreferrer">Hilfe</a>
+      <button class="link-button" type="button" @click="datenschutzModalOffen = true">Datenschutzhinweise</button>
+    </footer>
   </main>
 </template>
 
@@ -701,5 +724,71 @@ button.secondary {
   gap: 0.5rem;
   padding: 0.85rem 1rem;
   border-top: 1px solid var(--color-border);
+}
+
+.modal--datenschutz {
+  width: min(42rem, calc(100vw - 2rem));
+}
+
+.modal-body--scroll {
+  overflow-y: auto;
+}
+
+.modal-body--scroll :deep(h1) {
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem;
+}
+
+.modal-body--scroll :deep(h2),
+.modal-body--scroll :deep(h3) {
+  font-size: 1rem;
+  margin: 1rem 0 0.3rem;
+}
+
+.modal-body--scroll :deep(p),
+.modal-body--scroll :deep(ul) {
+  margin: 0 0 0.5rem;
+}
+
+.modal-body--scroll :deep(ul) {
+  padding-left: 1.4rem;
+}
+
+.modal-body--scroll :deep(li) {
+  margin-bottom: 0.2rem;
+}
+
+.modal-body--scroll :deep(code) {
+  font-family: monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.3em;
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  border-radius: 0.2rem;
+}
+
+.app-footer {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.5rem;
+}
+
+.link-button {
+  width: auto;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.link-button:hover {
+  color: var(--color-text);
+}
+
+.app-footer a.link-button {
+  display: inline;
 }
 </style>
