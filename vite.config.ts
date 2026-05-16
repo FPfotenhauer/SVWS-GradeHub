@@ -25,10 +25,15 @@ export default defineConfig({
       },
     },
   ],
-  envPrefix: ['VITE_', 'SVWSSERVER_'],
+  envPrefix: ['VITE_', 'SVWSSERVER_', 'ADMINTOOL_'],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
+  server: {
+    proxy: {
+      '/api': 'http://localhost:3000',
     },
   },
   build: {
@@ -37,7 +42,7 @@ export default defineConfig({
         entryFileNames: 'assets/app.js',
         chunkFileNames: 'assets/[name].js',
         assetFileNames: assetInfo => {
-          if (assetInfo.name?.endsWith('.css')) {
+          if (assetInfo.names?.some(n => n.endsWith('.css'))) {
             return 'assets/app.css'
           }
           return 'assets/[name][extname]'

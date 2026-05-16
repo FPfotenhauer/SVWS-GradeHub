@@ -29,7 +29,7 @@ export default defineConfig({
       },
     },
   ],
-  envPrefix: ['VITE_', 'SVWSSERVER_'],
+  envPrefix: ['VITE_', 'SVWSSERVER_', 'ADMINTOOL_'],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -45,7 +45,7 @@ export default defineConfig({
         name: 'SVWSGradeHubApp',
         entryFileNames: 'assets/app.js',
         assetFileNames: assetInfo => {
-          if (assetInfo.name?.endsWith('.css')) {
+          if (assetInfo.names?.some(n => n.endsWith('.css'))) {
             return 'assets/app.css'
           }
           return 'assets/[name][extname]'
