@@ -20,6 +20,12 @@ type KlassenleitungsFeld =
 
 type TextFeld = 'asv' | 'aue' | 'zeugnisbemerkung'
 
+const SCHLECHTE_NOTEN = new Set<string>(['4-', '5+', '5', '5-', '6'])
+
+function isSchlechteNote(note: string): boolean {
+  return SCHLECHTE_NOTEN.has(note)
+}
+
 const VALID_NOTES = new Set<string>([
   '1+', '1', '1-',
   '2+', '2', '2-',
@@ -524,7 +530,8 @@ function goSave(): void {
       <div class="title-wrap">
         <h1>Klassenleitung {{ klasse?.kuerzelAnzeige || klasse?.kuerzel || '' }}</h1>
         <p class="subtitle">
-          {{ schuelerListe.length }} SuS, {{ rowChangeCount }} Zeilen mit Änderungen
+          {{ schuelerListe.length }} SuS
+          <span v-if="rowChangeCount > 0" class="badge-geaendert">{{ rowChangeCount }} geändert</span>
         </p>
       </div>
       <button class="btn primary" type="button" :disabled="globalChangeCount === 0" @click="goSave">
@@ -539,6 +546,17 @@ function goSave(): void {
 
     <section v-else class="table-wrap">
       <table class="table">
+        <colgroup>
+          <col style="width: 3.5rem" />
+          <col style="width: 14rem" />
+          <col style="width: 5rem" />
+          <col style="width: 5rem" />
+          <col style="width: 5rem" />
+          <col style="width: 5rem" />
+          <col />
+          <col />
+          <col />
+        </colgroup>
         <thead>
           <tr>
             <th>#</th>
@@ -598,7 +616,7 @@ function goSave(): void {
             <td>
               <input
                 class="input note"
-                :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichArbeitslehre')), edited: hasChange(schueler, 'lernbereichArbeitslehre') }"
+                :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichArbeitslehre')), edited: hasChange(schueler, 'lernbereichArbeitslehre'), schlecht: isSchlechteNote(getCurrentValue(schueler, 'lernbereichArbeitslehre')) }"
                 type="text"
                 maxlength="2"
                 :value="getCurrentValue(schueler, 'lernbereichArbeitslehre')"
@@ -611,7 +629,7 @@ function goSave(): void {
             <td>
               <input
                 class="input note"
-                :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichNaturwissenschaft')), edited: hasChange(schueler, 'lernbereichNaturwissenschaft') }"
+                :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichNaturwissenschaft')), edited: hasChange(schueler, 'lernbereichNaturwissenschaft'), schlecht: isSchlechteNote(getCurrentValue(schueler, 'lernbereichNaturwissenschaft')) }"
                 type="text"
                 maxlength="2"
                 :value="getCurrentValue(schueler, 'lernbereichNaturwissenschaft')"
@@ -707,6 +725,22 @@ function goSave(): void {
   margin: 0.2rem 0 0;
   color: var(--color-text-muted);
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge-geaendert {
+  background-color: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  color: #166534;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+:root[data-theme='dark'] .badge-geaendert {
+  color: #86efac;
 }
 
 .btn {
@@ -752,6 +786,7 @@ function goSave(): void {
   width: 100%;
   border-collapse: collapse;
   min-width: 70rem;
+  table-layout: fixed;
 }
 
 th,
@@ -805,7 +840,25 @@ th {
   background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg));
 }
 
-tr.changed {
-  background: color-mix(in srgb, var(--color-primary) 7%, transparent);
+.input.schlecht,
+.input.edited.schlecht {
+  color: #dc2626;
+}
+:root[data-theme='dark'] .input.schlecht,
+:root[data-theme='dark'] .input.edited.schlecht {
+  color: #f87171;
+}
+
+tr.changed td:first-child {
+  position: relative;
+}
+tr.changed td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: var(--color-primary);
 }
 </style>

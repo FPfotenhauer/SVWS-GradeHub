@@ -83,6 +83,12 @@ function getLeistungsdaten(schueler: EnmSchueler): EnmLeistungsdaten | null {
 
 // ── Gültige Noten ──────────────────────────────────────────────────────────
 
+const SCHLECHTE_NOTEN = new Set<string>(['4-', '5+', '5', '5-', '6'])
+
+function isSchlechteNote(note: string): boolean {
+  return SCHLECHTE_NOTEN.has(note)
+}
+
 const VALID_NOTES = new Set<string>([
   '1+', '1', '1-',
   '2+', '2', '2-',
@@ -799,6 +805,7 @@ function goSave(): void {
                 :class="{
                   'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'noteQuartal')),
                   'note-geaendert': hasChange(schueler, 'noteQuartal'),
+                  'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, 'noteQuartal')) ?? ''),
                 }"
                 type="text"
                 maxlength="2"
@@ -819,6 +826,7 @@ function goSave(): void {
                 :class="{
                   'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'note')),
                   'note-geaendert': hasChange(schueler, 'note'),
+                  'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, 'note')) ?? ''),
                 }"
                 type="text"
                 maxlength="2"
@@ -1240,6 +1248,15 @@ function goSave(): void {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 
+.note-input.note-schlecht,
+.note-input.note-geaendert.note-schlecht {
+  color: #dc2626;
+}
+:root[data-theme='dark'] .note-input.note-schlecht,
+:root[data-theme='dark'] .note-input.note-geaendert.note-schlecht {
+  color: #f87171;
+}
+
 .note-input.note-invalid {
   border-color: var(--color-error-border);
   background-color: var(--color-error-bg);
@@ -1314,9 +1331,9 @@ function goSave(): void {
 
 .bemerkung-picker-button {
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface) 90%, white 10%);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
   color: var(--color-text);
   font-size: 0.78rem;
   font-weight: 700;
