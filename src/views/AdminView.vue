@@ -2,7 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { strToU8, zipSync } from 'fflate'
+import { strToU8, zipSync, unzipSync, strFromU8, decompressSync } from 'fflate'
 import { jsPDF } from 'jspdf'
 import { useAuthStore } from '@/stores/authStore'
 import { useChangeStore } from '@/stores/changeStore'
@@ -41,6 +41,9 @@ function onThemeChange(event: Event): void {
 }
 
 const läuftAufServer = window.location.protocol === 'http:' || window.location.protocol === 'https:'
+const kannAnSVWSServerSenden = computed<boolean>(() =>
+  authStore.baseUrl.trim() !== '' && authStore.schema.trim() !== '',
+)
 
 const isLoading = ref<boolean>(false)
 const errorMessage = ref<string>('')
@@ -898,6 +901,318 @@ async function testeSmtpVerbindung(): Promise<void> {
   }
 }
 
+// --- Import-Modal ---
+
+let importIdCounter = 0
+
+type ImportEintrag = {
+  id: number
+  file: File
+  dateiname: string
+  kuerzelErmittelt: string
+  status: 'ausstehend' | 'ok' | 'fehler' | 'passwortFehlt' | 'gesendet' | 'sendefehler'
+  fehlerText: string
+  enmJson: string
+  manuellKennwort: string
+  manuellKuerzel: string
+  istVerschluesselt: boolean
+  verarbeiteLaeuft: boolean
+  sendeLaeuft: boolean
+  sendeFehler: string
+}
+
+type EncryptedZipPayload = {
+  format: 'gradehub-encrypted-zip'
+  version: number
+  originalFileName: string
+  salt: string
+  iv: string
+  ciphertext: string
+}
+
+const importModalOffen = ref<boolean>(false)
+const importEintraege = ref<ImportEintrag[]>([])
+const importLaeuft = ref<boolean>(false)
+const importAllesendenLaeuft = ref<boolean>(false)
+
+const importErfolgreicheAnzahl = computed<number>(() =>
+  importEintraege.value.filter((e) => e.status === 'ok').length,
+)
+
+function oeffneImportModal(): void {
+  importModalOffen.value = true
+}
+
+function schliesseImportModal(): void {
+  importModalOffen.value = false
+}
+
+function resetImport(): void {
+  importEintraege.value = []
+}
+
+function importStatusText(eintrag: ImportEintrag): string {
+  if (eintrag.status === 'ok') return 'Bereit'
+  if (eintrag.status === 'passwortFehlt') return 'Kennwort fehlt'
+  if (eintrag.status === 'fehler') return 'Fehler'
+  if (eintrag.status === 'gesendet') return 'Gesendet'
+  if (eintrag.status === 'sendefehler') return 'Sendefehler'
+  if (eintrag.status === 'ausstehend') return 'Wird verarbeitet…'
+  return ''
+}
+
+function importEintragKlasse(eintrag: ImportEintrag): Record<string, boolean> {
+  return {
+    'import-ok': eintrag.status === 'ok' || eintrag.status === 'gesendet',
+    'import-gesendet': eintrag.status === 'gesendet',
+    'import-fehler': eintrag.status === 'fehler' || eintrag.status === 'sendefehler',
+    'import-warnung': eintrag.status === 'passwortFehlt',
+  }
+}
+
+function istEncryptedZipPayload(value: unknown): value is EncryptedZipPayload {
+  if (typeof value !== 'object' || value === null) return false
+  const rec = value as Record<string, unknown>
+  return rec.format === 'gradehub-encrypted-zip'
+    && typeof rec.version === 'number'
+    && typeof rec.originalFileName === 'string'
+    && typeof rec.salt === 'string'
+    && typeof rec.iv === 'string'
+    && typeof rec.ciphertext === 'string'
+}
+
+function extrahiereKuerzelAusDateiname(name: string): string {
+  const match = /^([A-Za-z0-9]+)-enm[.\-_]/i.exec(name)
+  return match?.[1]?.toUpperCase() ?? ''
+}
+
+function bauePasswortMap(): Map<string, string> {
+  return new Map(
+    lehrer.value
+      .filter((l) => l.notenpasswort.trim() !== '')
+      .map((l) => [l.kuerzel.toUpperCase(), l.notenpasswort]),
+  )
+}
+
+const IMPORT_GZIP_MAGIC_1 = 0x1f
+const IMPORT_GZIP_MAGIC_2 = 0x8b
+
+async function verarbeiteImportDateiInhalt(
+  file: File,
+  eintrag: ImportEintrag,
+  passwortMapNachKuerzel: Map<string, string>,
+): Promise<void> {
+  const buf = await file.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+
+  if (bytes.length > 2 && bytes[0] === IMPORT_GZIP_MAGIC_1 && bytes[1] === IMPORT_GZIP_MAGIC_2) {
+    eintrag.enmJson = strFromU8(decompressSync(bytes))
+    eintrag.kuerzelErmittelt = extrahiereKuerzelAusDateiname(file.name)
+    eintrag.istVerschluesselt = false
+    return
+  }
+
+  const text = new TextDecoder().decode(bytes)
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    throw new Error('Datei ist kein gültiges JSON und keine gzip-Datei.')
+  }
+
+  if (istEncryptedZipPayload(parsed)) {
+    eintrag.istVerschluesselt = true
+    const kuerzelAusOriginal = extrahiereKuerzelAusDateiname(parsed.originalFileName)
+    if (!eintrag.kuerzelErmittelt) {
+      eintrag.kuerzelErmittelt = kuerzelAusOriginal
+    }
+
+    const kuerzelSuche = (eintrag.manuellKuerzel.trim() || eintrag.kuerzelErmittelt).toUpperCase()
+    const passwort = eintrag.manuellKennwort.trim() || passwortMapNachKuerzel.get(kuerzelSuche) || ''
+
+    if (!passwort) {
+      eintrag.status = 'passwortFehlt'
+      eintrag.fehlerText = `Kein Notenpasswort für Kürzel "${eintrag.kuerzelErmittelt || '?'}" gefunden. Bitte Kürzel zuordnen oder Kennwort eingeben.`
+      return
+    }
+
+    const salt = base64NachArrayBuffer(parsed.salt)
+    const iv = base64NachArrayBuffer(parsed.iv)
+    const ciphertext = base64NachArrayBuffer(parsed.ciphertext)
+    const key = await leitenSchluesselAb(passwort, salt)
+
+    let plainZip: ArrayBuffer
+    try {
+      plainZip = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+    } catch {
+      throw new Error('Entschlüsselung fehlgeschlagen. Falsches Kennwort oder beschädigte Datei.')
+    }
+
+    const zipEntries = unzipSync(new Uint8Array(plainZip))
+    const enmBytes = zipEntries['enm.json']
+    if (!enmBytes) throw new Error('Die entschlüsselte ZIP enthält keine enm.json.')
+    eintrag.enmJson = strFromU8(enmBytes)
+  } else {
+    eintrag.enmJson = text
+    eintrag.kuerzelErmittelt = extrahiereKuerzelAusDateiname(file.name)
+    eintrag.istVerschluesselt = false
+  }
+}
+
+async function verarbeiteImportDatei(file: File, passwortMapNachKuerzel: Map<string, string>): Promise<void> {
+  const eintrag: ImportEintrag = {
+    id: ++importIdCounter,
+    file,
+    dateiname: file.name,
+    kuerzelErmittelt: '',
+    status: 'ausstehend',
+    fehlerText: '',
+    enmJson: '',
+    manuellKennwort: '',
+    manuellKuerzel: '',
+    istVerschluesselt: false,
+    verarbeiteLaeuft: false,
+    sendeLaeuft: false,
+    sendeFehler: '',
+  }
+  importEintraege.value.push(eintrag)
+
+  try {
+    await verarbeiteImportDateiInhalt(file, eintrag, passwortMapNachKuerzel)
+    if (eintrag.status === 'ausstehend') {
+      eintrag.status = 'ok'
+    }
+  } catch (error) {
+    eintrag.status = 'fehler'
+    eintrag.fehlerText = error instanceof Error ? error.message : 'Unbekannter Fehler.'
+  }
+}
+
+async function starteImportVonDateien(files: FileList | File[]): Promise<void> {
+  importLaeuft.value = true
+  const passwortMap = bauePasswortMap()
+  try {
+    for (const file of files) {
+      const lower = file.name.toLowerCase()
+      if (!lower.endsWith('.json') && !lower.endsWith('.gz') && !lower.endsWith('.enc.json')) continue
+      await verarbeiteImportDatei(file, passwortMap)
+    }
+  } finally {
+    importLaeuft.value = false
+  }
+}
+
+async function waehleImportOrdner(): Promise<void> {
+  const pickerWindow = window as Window & {
+    showDirectoryPicker?: (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle & {
+      entries: () => AsyncIterable<[string, { kind: string; getFile: () => Promise<File> }]>
+    }>
+  }
+
+  if (typeof pickerWindow.showDirectoryPicker !== 'function') {
+    errorMessage.value = 'Ordner-Auswahl wird von diesem Browser nicht unterstützt. Bitte Dateien einzeln auswählen.'
+    return
+  }
+
+  let handle: Awaited<ReturnType<NonNullable<typeof pickerWindow.showDirectoryPicker>>>
+  try {
+    handle = await pickerWindow.showDirectoryPicker({ mode: 'read' })
+  } catch {
+    return
+  }
+
+  const files: File[] = []
+  for await (const [, entry] of handle.entries()) {
+    if (entry.kind === 'file') {
+      files.push(await entry.getFile())
+    }
+  }
+
+  await starteImportVonDateien(files)
+}
+
+async function onImportDateienGewaehlt(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  if (!input.files || input.files.length === 0) return
+  await starteImportVonDateien(input.files)
+  input.value = ''
+}
+
+async function verarbeiteEintragNochmal(eintrag: ImportEintrag): Promise<void> {
+  eintrag.verarbeiteLaeuft = true
+  eintrag.fehlerText = ''
+  eintrag.status = 'ausstehend'
+  eintrag.enmJson = ''
+
+  const passwortMap = bauePasswortMap()
+  if (eintrag.manuellKuerzel.trim() && !eintrag.manuellKennwort.trim()) {
+    const pw = passwortMap.get(eintrag.manuellKuerzel.toUpperCase())
+    if (pw) eintrag.manuellKennwort = pw
+  }
+
+  try {
+    await verarbeiteImportDateiInhalt(eintrag.file, eintrag, passwortMap)
+    if (eintrag.status === 'ausstehend') {
+      eintrag.status = 'ok'
+    }
+  } catch (error) {
+    eintrag.status = 'fehler'
+    eintrag.fehlerText = error instanceof Error ? error.message : 'Unbekannter Fehler.'
+  } finally {
+    eintrag.verarbeiteLaeuft = false
+  }
+}
+
+async function sendeENMAnSVWSServer(enmJson: string): Promise<void> {
+  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
+  const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/enm/v2/import`
+  let response: Response
+
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: encodeBasicAuth(authStore.username, authStore.password),
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: enmJson,
+    })
+  } catch {
+    throw new Error('Netzwerkfehler beim Zugriff auf den SVWS-Server.')
+  }
+
+  if (!response.ok) {
+    throw new Error(`Import fehlgeschlagen (${response.status}).`)
+  }
+}
+
+async function sendeEintragAnServer(eintrag: ImportEintrag): Promise<void> {
+  eintrag.sendeLaeuft = true
+  eintrag.sendeFehler = ''
+  try {
+    await sendeENMAnSVWSServer(eintrag.enmJson)
+    eintrag.status = 'gesendet'
+  } catch (error) {
+    eintrag.status = 'sendefehler'
+    eintrag.sendeFehler = error instanceof Error ? error.message : 'Unbekannter Fehler.'
+  } finally {
+    eintrag.sendeLaeuft = false
+  }
+}
+
+async function sendeAlleAnServer(): Promise<void> {
+  importAllesendenLaeuft.value = true
+  try {
+    for (const eintrag of importEintraege.value) {
+      if (eintrag.status !== 'ok') continue
+      await sendeEintragAnServer(eintrag)
+    }
+  } finally {
+    importAllesendenLaeuft.value = false
+  }
+}
+
 function spaltenStil(key: SpaltenKey): { width: string; minWidth: string } {
   const breite = spaltenBreiten.value[key]
   if (key === 'passwort') {
@@ -1030,6 +1345,13 @@ onUnmounted(() => {
             @click="druckePasswortStreifen"
           >
             Drucken (Auswahl)
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="oeffneImportModal"
+          >
+            Dateien importieren
           </button>
         </div>
         <div class="table-header-actions">
@@ -1334,6 +1656,116 @@ onUnmounted(() => {
             {{ smtpTestLaeuft ? 'Teste…' : 'Verbindung testen' }}
           </button>
           <button class="btn-generate btn-generate--aktiv" type="button" @click="speichereSmtpKonfiguration">Übernehmen</button>
+        </div>
+      </div>
+    </div>
+    <!-- Import-Modal -->
+    <div v-if="importModalOffen" class="modal-backdrop" @click.self="schliesseImportModal">
+      <div class="modal import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+        <div class="modal-header">
+          <h2 id="import-modal-title">Notendateien importieren</h2>
+          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseImportModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-meta">
+            Wählen Sie einen Ordner oder einzelne Dateien mit den Notendateien der Lehrkräfte aus.
+            Verschlüsselte Dateien werden automatisch mit den gespeicherten Notenpasswörtern entschlüsselt.
+          </p>
+
+          <div v-if="importEintraege.length === 0" class="import-auswahl-row">
+            <button class="btn-generate" type="button" :disabled="importLaeuft" @click="waehleImportOrdner">
+              Ordner auswählen
+            </button>
+            <label class="btn-generate modal-file-label" for="import-dateien">Dateien auswählen…</label>
+            <input
+              id="import-dateien"
+              class="modal-file-input"
+              type="file"
+              multiple
+              accept=".json,.gz,.enc.json"
+              @change="onImportDateienGewaehlt"
+            />
+          </div>
+
+          <p v-if="importLaeuft" class="modal-meta">Wird verarbeitet…</p>
+
+          <div v-if="importEintraege.length > 0" class="import-liste">
+            <div
+              v-for="eintrag in importEintraege"
+              :key="eintrag.id"
+              class="import-eintrag"
+              :class="importEintragKlasse(eintrag)"
+            >
+              <div class="import-eintrag-kopf">
+                <span class="import-dateiname" :title="eintrag.dateiname">{{ eintrag.dateiname }}</span>
+                <span v-if="eintrag.kuerzelErmittelt" class="import-kuerzel">{{ eintrag.kuerzelErmittelt }}</span>
+                <span class="import-status-badge">{{ importStatusText(eintrag) }}</span>
+              </div>
+
+              <div v-if="eintrag.status === 'passwortFehlt' || eintrag.status === 'fehler'" class="import-eintrag-aktion">
+                <p v-if="eintrag.fehlerText" class="import-fehlertext">{{ eintrag.fehlerText }}</p>
+                <div v-if="eintrag.istVerschluesselt" class="import-manuell">
+                  <select v-model="eintrag.manuellKuerzel" class="import-select">
+                    <option value="">Kürzel zuordnen…</option>
+                    <option v-for="l in sichtbareLehrer" :key="l.id" :value="l.kuerzel">
+                      {{ l.kuerzel }} – {{ l.nachname }}, {{ l.vorname }}
+                    </option>
+                  </select>
+                  <input
+                    v-model="eintrag.manuellKennwort"
+                    type="password"
+                    class="import-pw-input"
+                    placeholder="Kennwort (falls abweichend)"
+                  />
+                  <button
+                    class="btn-generate"
+                    type="button"
+                    :disabled="eintrag.verarbeiteLaeuft"
+                    @click="verarbeiteEintragNochmal(eintrag)"
+                  >
+                    {{ eintrag.verarbeiteLaeuft ? 'Wird verarbeitet…' : 'Nochmal versuchen' }}
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="eintrag.status === 'ok' && kannAnSVWSServerSenden" class="import-eintrag-senden">
+                <button
+                  class="btn-generate btn-generate--aktiv"
+                  type="button"
+                  :disabled="eintrag.sendeLaeuft"
+                  @click="sendeEintragAnServer(eintrag)"
+                >
+                  {{ eintrag.sendeLaeuft ? 'Wird gesendet…' : 'An SVWS-Server senden' }}
+                </button>
+                <span v-if="eintrag.sendeFehler" class="import-fehlertext">{{ eintrag.sendeFehler }}</span>
+              </div>
+
+              <div v-if="eintrag.status === 'ok' && !kannAnSVWSServerSenden" class="import-eintrag-senden">
+                <span class="modal-meta">Kein SVWS-Server verbunden – Datei kann nicht übertragen werden.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            v-if="importEintraege.length > 0"
+            class="btn-generate"
+            type="button"
+            :disabled="importLaeuft || importAllesendenLaeuft"
+            @click="resetImport"
+          >
+            Zurücksetzen
+          </button>
+          <button
+            v-if="importErfolgreicheAnzahl > 0 && kannAnSVWSServerSenden"
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="importAllesendenLaeuft"
+            @click="sendeAlleAnServer"
+          >
+            {{ importAllesendenLaeuft ? 'Wird gesendet…' : `Alle ${importErfolgreicheAnzahl} an Server senden` }}
+          </button>
+          <button class="btn-generate" type="button" @click="schliesseImportModal">Schließen</button>
         </div>
       </div>
     </div>
@@ -1928,6 +2360,135 @@ td.col-check input[type='checkbox'] {
 
 .versand-meldung {
   white-space: nowrap;
+}
+
+.import-modal {
+  width: min(720px, calc(100vw - 2rem));
+  max-height: calc(100dvh - 4rem);
+}
+
+.import-auswahl-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.import-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.import-eintrag {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  font-size: 0.9rem;
+}
+
+.import-ok {
+  border-color: color-mix(in srgb, #16a34a 35%, transparent);
+  background: color-mix(in srgb, #16a34a 7%, var(--color-surface));
+}
+
+.import-gesendet {
+  border-color: color-mix(in srgb, #16a34a 50%, transparent);
+  background: color-mix(in srgb, #16a34a 12%, var(--color-surface));
+}
+
+.import-fehler {
+  border-color: color-mix(in srgb, var(--color-error, #dc2626) 35%, transparent);
+  background: color-mix(in srgb, var(--color-error, #dc2626) 7%, var(--color-surface));
+}
+
+.import-warnung {
+  border-color: color-mix(in srgb, #b45309 35%, transparent);
+  background: color-mix(in srgb, #b45309 7%, var(--color-surface));
+}
+
+.import-eintrag-kopf {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.import-dateiname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Noto Sans Mono', 'Courier New', monospace;
+  font-size: 0.85rem;
+}
+
+.import-kuerzel {
+  flex-shrink: 0;
+  font-family: 'Noto Sans Mono', 'Courier New', monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.import-status-badge {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.import-eintrag-aktion {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.import-fehlertext {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--color-error, #dc2626);
+}
+
+.import-manuell {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.import-select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.import-pw-input {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.4rem;
+  width: 12rem;
+}
+
+.import-eintrag-senden {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .smtp-test-ok,

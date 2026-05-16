@@ -1,13 +1,16 @@
 {
   "name": "svws-gradehub",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
     "server": "node server.js",
     "start": "node server.js",
+    "package:offline": "npm run build && mkdir -p release && cd dist && zip -r \"../release/gradehub-$(node -p \"require('../package.json').version\")-offline.zip\" . && cd .. && echo \"→ release/gradehub-$(node -p \"require('./package.json').version\")-offline.zip\"",
+    "package:server": "npm run build:web && mkdir -p release && zip -r \"release/gradehub-$(node -p \"require('./package.json').version\")-server.zip\" dist/ server.js package.json package-lock.json && echo \"→ release/gradehub-$(node -p \"require('./package.json').version\")-server.zip\"",
+    "package:all": "npm run package:offline && npm run package:server && npm run build",
     "dev:offline": "vite --config vite.offline.config.ts",
     "build": "vue-tsc --noEmit && vite build --config vite.offline.config.ts",
     "build:web": "vue-tsc --noEmit && vite build",

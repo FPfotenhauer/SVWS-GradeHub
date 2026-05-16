@@ -1,9 +1,12 @@
 import { fileURLToPath, URL } from 'node:url'
 import { readFile, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
+
+const { version } = JSON.parse(readFileSync('./package.json', 'utf-8')) as { version: string }
 
 // Offline-Build mit dist/index.html + dist/assets.
 // Erzeugt ein klassisches IIFE-Script, damit file:// ohne ES-Module lauffaehig bleibt.
@@ -29,6 +32,9 @@ export default defineConfig({
       },
     },
   ],
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   envPrefix: ['VITE_', 'SVWSSERVER_', 'ADMINTOOL_'],
   resolve: {
     alias: {
