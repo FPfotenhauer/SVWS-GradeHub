@@ -52,7 +52,7 @@ function initialValue(storeValue: string, ...fallbacks: string[]): string {
 const baseUrl = ref<string>(initialValue(authStore.baseUrl, baueBaseUrlAusEnv()))
 const schema = ref<string>(initialValue(authStore.schema, envString('VITE_SVWS_SCHEMA'), envString('SVWSSERVER_SCHEMA')))
 const username = ref<string>(initialValue(authStore.username, envString('VITE_SVWS_USERNAME'), envString('SVWSSERVER_USER')))
-const password = ref<string>(initialValue(authStore.password, envString('VITE_SVWS_PASSWORD'), envString('SVWSSERVER_PASSWORD')))
+const password = ref<string>(initialValue(authStore.password, envString('VITE_SVWS_PASSWORD')))
 
 const isLoading = ref<boolean>(false)
 const statusMessage = ref<string>('')

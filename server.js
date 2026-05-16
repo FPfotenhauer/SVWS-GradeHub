@@ -10,11 +10,17 @@ const PORT = process.env.PORT ?? 3000
 app.use(express.json())
 app.use(express.static(join(__dirname, 'dist')))
 
+const PRIVATE_HOST_RE = /^(localhost$|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|0\.0\.0\.0$)/i
+
 app.post('/api/mail/test', async (req, res) => {
   const { host, port, user, password, tls } = req.body
 
   if (!host) {
     return res.status(400).send('SMTP-Host fehlt.')
+  }
+
+  if (PRIVATE_HOST_RE.test(host.trim())) {
+    return res.status(400).send('Interner Host nicht erlaubt.')
   }
 
   const numPort = Number(port ?? 587)
