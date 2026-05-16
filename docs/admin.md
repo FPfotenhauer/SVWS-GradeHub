@@ -5,6 +5,8 @@
 Der Adminbereich (`/admin`) dient zur Vorbereitung und Verteilung verschlüsselter Notendateien sowie zum Import ausgefüllter Dateien zurück in den SVWS-Server.
 Er richtet sich an Schulleitungen und Notenkoordinatoren.
 
+Eine kompakte Schritt-fuer-Schritt-Version mit Screenshots finden Sie hier: [Admin-Tutorial](./admin-tutorial.md).
+
 > **Hinweis zum Betriebsmodus:** Der Adminbereich steht in beiden Betriebsmodi zur Verfügung. Der Button **Dateien versenden** (E-Mail-Versand) erscheint jedoch nur, wenn SVWS-GradeHub über einen Webserver betrieben wird (Server-Modus). Im reinen Offline-Modus (`file://`) können Dateien nur heruntergeladen und manuell verteilt werden.
 
 ## Funktionen im Adminbereich
