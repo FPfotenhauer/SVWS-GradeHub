@@ -20,3 +20,6 @@ pnpm-debug.log*
 # Vite-Cache
 .vite/
 
+# Release-Pakete
+release/
+
