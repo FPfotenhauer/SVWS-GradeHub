@@ -481,7 +481,7 @@ function oeffneAdmin(): void {
         <button :disabled="isLoading || !ausgewaehlteDatei" type="button" @click="ladeVonDatei">
           Lehrerdatei laden
         </button>
-        <p class="help">Unterstuetzt werden ENM-JSON, gzip-komprimierte ENM-Dateien sowie verschlüsselte Dateien (.enc.json).</p>
+        <p class="help">Unterstützt werden ENM-JSON, gzip-komprimierte ENM-Dateien sowie verschlüsselte Dateien (.enc.json).</p>
       </div>
     </section>
 
