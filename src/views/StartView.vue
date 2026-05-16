@@ -58,6 +58,8 @@ const errorMessage = ref<string>('')
 const ausgewaehlteDatei = ref<File | null>(null)
 const lehrerListe = ref<LehrerKurzinfo[]>([])
 const selectedLehrerId = ref<number | null>(null)
+const appVersion = __APP_VERSION__
+
 const serverCardOpen = ref<boolean>(true)
 const fileCardOpen = ref<boolean>(true)
 
@@ -414,7 +416,10 @@ function oeffneAdmin(): void {
 
 <template>
   <main class="start-view">
-    <h1>SVWS-GradeHub</h1>
+    <div class="app-header">
+      <h1>SVWS-GradeHub</h1>
+      <span class="app-version">v{{ appVersion }}</span>
+    </div>
 
     <section v-if="admintoolVisible" class="card">
       <button class="card-toggle" type="button" @click="serverCardOpen = !serverCardOpen">
@@ -513,6 +518,17 @@ function oeffneAdmin(): void {
 </template>
 
 <style scoped>
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.app-version {
+  font-size: 1rem;
+  color: var(--color-text-muted);
+}
+
 .start-view {
   display: grid;
   gap: 1rem;
