@@ -20,6 +20,9 @@ type KlassenleitungsFeld =
 
 type TextFeld = 'asv' | 'aue' | 'zeugnisbemerkung'
 
+// Schulformen ohne Lernbereichsnoten (AL/NW) — bei Bedarf ergänzen
+const SCHULFORMEN_OHNE_LERNBEREICHE = new Set(['G'])
+
 const SCHLECHTE_NOTEN = new Set<string>(['4-', '5+', '5', '5-', '6'])
 
 function isSchlechteNote(note: string): boolean {
@@ -47,6 +50,10 @@ const router = useRouter()
 const enmStore = useENMStore()
 const changeStore = useChangeStore()
 const globalChangeCount = computed<number>(() => changeStore.changeCount)
+
+const showLernbereiche = computed(
+  () => !SCHULFORMEN_OHNE_LERNBEREICHE.has(enmStore.enmDaten?.schulform ?? ''),
+)
 
 const klasseId = computed<number>(() => {
   const raw = route.params.klasseId
@@ -551,8 +558,8 @@ function goSave(): void {
           <col style="width: 14rem" />
           <col style="width: 5rem" />
           <col style="width: 5rem" />
-          <col style="width: 5rem" />
-          <col style="width: 5rem" />
+          <col v-if="showLernbereiche" style="width: 5rem" />
+          <col v-if="showLernbereiche" style="width: 5rem" />
           <col />
           <col />
           <col />
@@ -563,8 +570,8 @@ function goSave(): void {
             <th>Name</th>
             <th title="Fehlstunden gesamt">FSG</th>
             <th title="Fehlstunden unentschuldigt">FSU</th>
-            <th title="Lernbereichsnote Arbeitslehre">AL</th>
-            <th title="Lernbereichsnote Naturwissenschaft">NW</th>
+            <th v-if="showLernbereiche" title="Lernbereichsnote Arbeitslehre">AL</th>
+            <th v-if="showLernbereiche" title="Lernbereichsnote Naturwissenschaft">NW</th>
             <th title="Arbeits- und Sozialverhalten">ASV</th>
             <th title="Außerunterrichtliches Engagement">AUE</th>
             <th title="Zeugnisbemerkungen">ZB</th>
@@ -613,7 +620,7 @@ function goSave(): void {
                 @blur="onBlur($event, schueler, 'fehlstundenUnentschuldigt')"
               />
             </td>
-            <td>
+            <td v-if="showLernbereiche">
               <input
                 class="input note"
                 :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichArbeitslehre')), edited: hasChange(schueler, 'lernbereichArbeitslehre'), schlecht: isSchlechteNote(getCurrentValue(schueler, 'lernbereichArbeitslehre')) }"
@@ -626,7 +633,7 @@ function goSave(): void {
                 @blur="onBlur($event, schueler, 'lernbereichArbeitslehre')"
               />
             </td>
-            <td>
+            <td v-if="showLernbereiche">
               <input
                 class="input note"
                 :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichNaturwissenschaft')), edited: hasChange(schueler, 'lernbereichNaturwissenschaft'), schlecht: isSchlechteNote(getCurrentValue(schueler, 'lernbereichNaturwissenschaft')) }"

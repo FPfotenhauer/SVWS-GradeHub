@@ -150,12 +150,23 @@ export interface EnmLernabschnitt {
   foerderschwerpunkt2: number | null
 }
 
+export interface EnmTeilleistungsart {
+  id: number
+  bezeichnung: string
+  sortierung: number
+  gewichtung: number
+}
+
 export interface EnmTeilleistung {
   id: number
   artID: number
+  tsArtID: string
   datum: string | null
+  tsDatum: string
   bemerkung: string | null
+  tsBemerkung: string
   note: Notenkuerzel | null
+  tsNote: string
 }
 
 export interface EnmLeistungsdaten {
@@ -246,7 +257,7 @@ export interface EnmExport {
   lehrer: EnmLehrer[]
   faecher: EnmFach[]
   ankreuzkompetenzen: unknown[]
-  teilleistungsarten: unknown[]
+  teilleistungsarten: EnmTeilleistungsart[]
   lerngruppen: EnmLerngruppe[]
   schueler: EnmSchueler[]
 }

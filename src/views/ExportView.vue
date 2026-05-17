@@ -8,7 +8,7 @@ import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { EnmExport, EnmLeistungsdaten } from '@/types/enm'
-import type { LeistungsChange } from '@/types/changes'
+import type { LeistungsFeld, LeistungsChange } from '@/types/changes'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -83,7 +83,8 @@ const sourceDisplayName = computed<string>(() => {
   return sourceFileName.value
 })
 
-const fieldLabels: Record<LeistungsChange['feld'], string> = {
+type StaticFeld = Exclude<LeistungsFeld, `teilleistung:${number}`>
+const fieldLabels: Record<StaticFeld, string> = {
   note: 'Note',
   noteQuartal: 'Quartalsnote',
   fehlstundenFach: 'FS Fach',
@@ -98,6 +99,11 @@ const fieldLabels: Record<LeistungsChange['feld'], string> = {
   fachbezogeneBemerkungen: 'Fachbez. Bemerkung',
   istGemahnt: 'Gemahnt',
   mahndatum: 'Mahndatum',
+}
+
+function feldLabel(feld: LeistungsFeld): string {
+  if (feld.startsWith('teilleistung:')) return `Teilleistung ${feld.split(':')[1] ?? ''}`
+  return (fieldLabels as Record<string, string>)[feld] ?? feld
 }
 
 type ChangeSummaryItem = {
@@ -149,7 +155,7 @@ const changeSummary = computed<ChangeSummaryItem[]>(() => {
         key: `${change.schuelerId}:${change.lerngruppenId}:${change.feld}`,
         schueler,
         kontext,
-        feld: fieldLabels[change.feld],
+        feld: feldLabel(change.feld),
         alt: formatValue(change.alterWert),
         neu: formatValue(change.neuerWert),
       }
@@ -260,6 +266,16 @@ function setLeistungsfeld(
   if (feld === 'fachbezogeneBemerkungen') {
     ld.fachbezogeneBemerkungen = neuerWert
     ld.tsFachbezogeneBemerkungen = ts
+    return
+  }
+
+  if (feld.startsWith('teilleistung:')) {
+    const artId = parseInt(feld.split(':')[1] ?? '', 10)
+    const tl = ld.teilleistungen.find((t) => t.artID === artId)
+    if (tl) {
+      tl.note = neuerWert as EnmLeistungsdaten['note']
+      tl.tsNote = ts
+    }
     return
   }
 
