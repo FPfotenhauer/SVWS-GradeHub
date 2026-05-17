@@ -697,25 +697,40 @@ function closeFloskelDialog(): void {
   floskelDialog.value = ''
 }
 
-function applyFloskelDialog(value: string): void {
+function commitFloskelValue(value: string): void {
   const schueler = aktiverFloskelSchueler.value
   const index = floskelDialog.index
-
-  if (!schueler || index < 0) {
-    closeFloskelDialog()
-    return
-  }
+  if (!schueler || index < 0) return
 
   const input = bemerkungInputs.value[index]
-  if (input) {
-    input.value = value
-  }
+  if (input) input.value = value
 
   invalidIds.delete(invalidKey(schueler.id, 'fachbezogeneBemerkungen'))
   commitField(schueler, 'fachbezogeneBemerkungen', value, index, false)
-  closeFloskelDialog()
+}
 
-  nextTick(() => focusFieldAt(index, 'fachbezogeneBemerkungen'))
+function applyFloskelDialog(value: string): void {
+  if (!aktiverFloskelSchueler.value || floskelDialog.index < 0) return
+  commitFloskelValue(value)
+  floskelDialog.value = value
+}
+
+function navigateFloskelDialog(direction: 'prev' | 'next', entwurf: string): void {
+  const schueler = aktiverFloskelSchueler.value
+  if (schueler) {
+    const saved = editValues.get(editKey(schueler.id, 'fachbezogeneBemerkungen'))
+      ?? originalFieldValue(schueler, 'fachbezogeneBemerkungen')
+    if (entwurf !== saved) commitFloskelValue(entwurf)
+  }
+
+  const newIndex = direction === 'prev' ? floskelDialog.index - 1 : floskelDialog.index + 1
+  const newSchueler = schuelerListe.value[newIndex]
+  if (!newSchueler) return
+
+  floskelDialog.schuelerId = newSchueler.id
+  floskelDialog.index = newIndex
+  floskelDialog.value = editValues.get(editKey(newSchueler.id, 'fachbezogeneBemerkungen'))
+    ?? originalFieldValue(newSchueler, 'fachbezogeneBemerkungen')
 }
 
 function hasAnyRowChange(schueler: EnmSchueler): boolean {
@@ -1187,8 +1202,13 @@ function goSave(): void {
       :jahrgaenge="jahrgaenge"
       :schueler="aktiverFloskelSchueler"
       :fach="fach"
+      :klasse-kuerzel="aktiverFloskelSchueler ? klassenById.get(aktiverFloskelSchueler.klasseID) : undefined"
+      :has-prev="floskelDialog.index > 0"
+      :has-next="floskelDialog.index < schuelerListe.length - 1"
       @close="closeFloskelDialog"
       @apply="applyFloskelDialog"
+      @navigate-prev="navigateFloskelDialog('prev', $event)"
+      @navigate-next="navigateFloskelDialog('next', $event)"
     />
 
   </main>

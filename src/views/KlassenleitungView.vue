@@ -496,15 +496,32 @@ function closeTextDialog(): void {
   textDialog.value = ''
 }
 
-function applyTextDialog(value: string): void {
+function commitTextValue(value: string): void {
   const schueler = aktiverDialogSchueler.value
-  if (!schueler) {
-    closeTextDialog()
-    return
+  if (!schueler) return
+  commitField(schueler, textDialog.feld, value)
+}
+
+function applyTextDialog(value: string): void {
+  if (!aktiverDialogSchueler.value) return
+  commitTextValue(value)
+  textDialog.value = value
+}
+
+function navigateTextDialog(direction: 'prev' | 'next', entwurf: string): void {
+  const schueler = aktiverDialogSchueler.value
+  if (schueler) {
+    const saved = getCurrentValue(schueler, textDialog.feld)
+    if (entwurf !== saved) commitTextValue(entwurf)
   }
 
-  commitField(schueler, textDialog.feld, value)
-  closeTextDialog()
+  const newIndex = direction === 'prev' ? textDialog.rowIndex - 1 : textDialog.rowIndex + 1
+  const newSchueler = schuelerListe.value[newIndex]
+  if (!newSchueler) return
+
+  textDialog.schuelerId = newSchueler.id
+  textDialog.rowIndex = newIndex
+  textDialog.value = getCurrentValue(newSchueler, textDialog.feld)
 }
 
 const rowChangeCount = computed<number>(() => {
@@ -700,8 +717,13 @@ function goSave(): void {
       :jahrgaenge="jahrgaenge"
       :schueler="aktiverDialogSchuelerForDialog"
       :fach="null"
+      :klasse-kuerzel="klasse?.kuerzelAnzeige || klasse?.kuerzel"
+      :has-prev="textDialog.rowIndex > 0"
+      :has-next="textDialog.rowIndex < schuelerListe.length - 1"
       @close="closeTextDialog"
       @apply="applyTextDialog"
+      @navigate-prev="navigateTextDialog('prev', $event)"
+      @navigate-next="navigateTextDialog('next', $event)"
     />
   </main>
 </template>
