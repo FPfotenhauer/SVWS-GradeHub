@@ -13,6 +13,7 @@ export type LeistungsFeld =
   | 'fachbezogeneBemerkungen'
   | 'istGemahnt'
   | 'mahndatum'
+  | `teilleistung:${number}`
 
 export interface LeistungsChange {
   schuelerId:        number

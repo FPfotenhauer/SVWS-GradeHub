@@ -41,6 +41,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:3000',
     },
+    sourcemapIgnoreList: (sourcePath) => sourcePath.includes('node_modules'),
   },
   build: {
     rollupOptions: {

@@ -13,6 +13,9 @@ interface Props {
   jahrgaenge: readonly EnmJahrgang[]
   schueler: EnmSchueler | null
   fach: EnmFach | null
+  klasseKuerzel?: string
+  hasPrev?: boolean
+  hasNext?: boolean
 }
 
 interface FloskelListItem {
@@ -28,7 +31,15 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   close: []
   apply: [value: string]
+  navigatePrev: [entwurf: string]
+  navigateNext: [entwurf: string]
 }>()
+
+const schuelerInfo = computed<string>(() => {
+  if (!props.schueler) return ''
+  const name = `${props.schueler.vorname} ${props.schueler.nachname}`
+  return props.klasseKuerzel ? `${name} · ${props.klasseKuerzel}` : name
+})
 
 const searchInput = ref<HTMLInputElement | null>(null)
 const suchbegriff = ref('')
@@ -59,6 +70,14 @@ function resolvePossessivePronoun(schueler: EnmSchueler | null): string {
   return schueler?.geschlecht === 'w' ? 'ihre' : 'seine'
 }
 
+function resolveGenderAlternation(text: string, schueler: EnmSchueler | null): string {
+  const geschlecht = schueler?.geschlecht
+  if (geschlecht !== 'm' && geschlecht !== 'w') return text
+  return text.replace(/&([^%&]*)%([^&]*)&/g, (_, maennlich: string, weiblich: string) => {
+    return geschlecht === 'm' ? maennlich : weiblich
+  })
+}
+
 function renderFloskelText(text: string): string {
   const vorname = props.schueler?.vorname ?? ''
   const nachname = props.schueler?.nachname ?? ''
@@ -74,9 +93,11 @@ function renderFloskelText(text: string): string {
     ['$EIN$', resolveEinSuffix(props.schueler)],
   ]
 
-  return replacements.reduce((current, [token, replacement]) => {
+  const withTokens = replacements.reduce((current, [token, replacement]) => {
     return current.replace(new RegExp(escapeRegExp(token), 'g'), replacement)
   }, text)
+
+  return resolveGenderAlternation(withTokens, props.schueler)
 }
 
 function concatText(base: string, addition: string): string {
@@ -246,6 +267,8 @@ watch(() => props.open, async (isOpen) => {
   aktiverJahrgang.value = 'alle'
   entwurf.value = props.modelValue
   ausgewaehlteFloskelId.value = gefilterteFloskeln.value[0]?.id ?? ''
+  navigatePending.value = null
+  closePending.value = false
 
   await nextTick()
   searchInput.value?.focus()
@@ -254,6 +277,12 @@ watch(() => props.open, async (isOpen) => {
 watch(() => props.modelValue, (value) => {
   if (props.open) {
     entwurf.value = value
+  }
+})
+
+watch(() => props.schueler?.id, () => {
+  if (props.open) {
+    entwurf.value = props.modelValue
   }
 })
 
@@ -279,12 +308,50 @@ function setzeGruppe(gruppe: string): void {
   }
 }
 
+const navigatePending = ref<'prev' | 'next' | null>(null)
+const closePending = ref(false)
+
+function verwerfen(): void {
+  navigatePending.value = null
+  entwurf.value = props.modelValue
+}
+
 function uebernehmen(): void {
+  navigatePending.value = null
   emit('apply', entwurf.value)
 }
 
 function schliessen(): void {
+  if (entwurf.value !== props.modelValue) {
+    closePending.value = true
+    return
+  }
+  navigatePending.value = null
   emit('close')
+}
+
+function confirmSchliessen(save: boolean): void {
+  closePending.value = false
+  if (save) emit('apply', entwurf.value)
+  emit('close')
+}
+
+function onNavigateClick(direction: 'prev' | 'next'): void {
+  if (entwurf.value !== props.modelValue) {
+    navigatePending.value = direction
+    return
+  }
+  if (direction === 'prev') emit('navigatePrev', entwurf.value)
+  else emit('navigateNext', entwurf.value)
+}
+
+function confirmNavigate(save: boolean): void {
+  const direction = navigatePending.value
+  navigatePending.value = null
+  if (!direction) return
+  const value = save ? entwurf.value : props.modelValue
+  if (direction === 'prev') emit('navigatePrev', value)
+  else emit('navigateNext', value)
 }
 </script>
 
@@ -295,7 +362,10 @@ function schliessen(): void {
         <header class="floskel-header">
           <div>
             <p class="floskel-kicker">Textbausteine</p>
-            <h2 class="floskel-title">{{ title }}</h2>
+            <div class="floskel-title-row">
+              <h2 class="floskel-title">{{ title }}</h2>
+              <span v-if="schuelerInfo" class="floskel-schueler-info">{{ schuelerInfo }}</span>
+            </div>
             <p class="floskel-subtitle">
               Allgemeine Floskeln und passende Bereichs-Floskeln stehen gemeinsam zur Auswahl. Doppelklick fügt den Text ein.
             </p>
@@ -433,8 +503,33 @@ function schliessen(): void {
         </div>
 
         <footer class="floskel-footer">
-          <button class="secondary" type="button" @click="schliessen">Abbrechen</button>
-          <button type="button" @click="uebernehmen">Übernehmen</button>
+          <template v-if="navigatePending">
+            <p class="floskel-confirm-text">Text nicht übernommen — wie fortfahren?</p>
+            <div class="floskel-action-buttons">
+              <button class="secondary" type="button" @click="navigatePending = null">Abbrechen</button>
+              <button class="secondary" type="button" @click="confirmNavigate(false)">Verwerfen &amp; weiter</button>
+              <button type="button" @click="confirmNavigate(true)">Übernehmen &amp; weiter</button>
+            </div>
+          </template>
+          <template v-else-if="closePending">
+            <p class="floskel-confirm-text">Text nicht übernommen — trotzdem schließen?</p>
+            <div class="floskel-action-buttons">
+              <button class="secondary" type="button" @click="closePending = false">Abbrechen</button>
+              <button class="secondary" type="button" @click="confirmSchliessen(false)">Verwerfen &amp; schließen</button>
+              <button type="button" @click="confirmSchliessen(true)">Übernehmen &amp; schließen</button>
+            </div>
+          </template>
+          <template v-else>
+            <div class="floskel-nav-buttons">
+              <button class="secondary" type="button" :disabled="!hasPrev" @click="onNavigateClick('prev')">Vorheriger</button>
+              <button class="secondary" type="button" :disabled="!hasNext" @click="onNavigateClick('next')">Nächster</button>
+            </div>
+            <div class="floskel-action-buttons">
+              <button class="secondary" type="button" @click="verwerfen">Abbrechen</button>
+              <button type="button" @click="uebernehmen">Übernehmen</button>
+              <button class="secondary" type="button" @click="schliessen">Schließen</button>
+            </div>
+          </template>
         </footer>
       </section>
     </div>
@@ -494,6 +589,19 @@ function schliessen(): void {
 .floskel-title {
   margin: 0;
   font-size: 1.35rem;
+}
+
+.floskel-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.floskel-schueler-info {
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  white-space: nowrap;
 }
 
 .floskel-subtitle {
@@ -757,9 +865,23 @@ function schliessen(): void {
 
 .floskel-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 0.75rem;
   border-top: 1px solid var(--color-border);
+}
+
+.floskel-nav-buttons,
+.floskel-action-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.floskel-confirm-text {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+  align-self: center;
 }
 
 @media (max-width: 980px) {

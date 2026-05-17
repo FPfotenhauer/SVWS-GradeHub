@@ -7,7 +7,7 @@ import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { LeistungsFeld } from '@/types/changes'
-import type { EnmFloskelgruppe, EnmLeistungsdaten, EnmSchueler } from '@/types/enm'
+import type { EnmFloskelgruppe, EnmLeistungsdaten, EnmSchueler, EnmTeilleistungsart } from '@/types/enm'
 
 const route = useRoute()
 const router = useRouter()
@@ -83,6 +83,12 @@ function getLeistungsdaten(schueler: EnmSchueler): EnmLeistungsdaten | null {
 
 // ── Gültige Noten ──────────────────────────────────────────────────────────
 
+const SCHLECHTE_NOTEN = new Set<string>(['4-', '5+', '5', '5-', '6'])
+
+function isSchlechteNote(note: string): boolean {
+  return SCHLECHTE_NOTEN.has(note)
+}
+
 const VALID_NOTES = new Set<string>([
   '1+', '1', '1-',
   '2+', '2', '2-',
@@ -131,6 +137,7 @@ type EditField =
   | 'fehlstundenFach'
   | 'fehlstundenUnentschuldigtFach'
   | 'fachbezogeneBemerkungen'
+  | `teilleistung:${number}`
 type ColumnKey = 'nr' | 'name' | 'klasse' | 'fsf' | 'fsu' | 'quartal' | 'note'
 
 const columnWidths = reactive<Record<ColumnKey, number>>({
@@ -184,8 +191,90 @@ function startResize(key: ColumnKey, event: PointerEvent): void {
   window.addEventListener('pointerup', stopResize)
 }
 
+// ── Teilleistungs-Spalten-Resize ───────────────────────────────────────────
+
+const TL_DEFAULT_WIDTH = 110
+const TL_MIN_WIDTH = 64
+const tlColumnWidths = reactive(new Map<number, number>())
+
+function getTlColumnWidth(artId: number): number {
+  return tlColumnWidths.get(artId) ?? TL_DEFAULT_WIDTH
+}
+
+const resizingTl = ref<{
+  artId: number
+  startX: number
+  startWidth: number
+} | null>(null)
+
+function onResizeMoveTl(event: PointerEvent): void {
+  if (!resizingTl.value) return
+  const delta = event.clientX - resizingTl.value.startX
+  const nextWidth = Math.max(TL_MIN_WIDTH, resizingTl.value.startWidth + delta)
+  tlColumnWidths.set(resizingTl.value.artId, nextWidth)
+}
+
+function stopResizeTl(): void {
+  if (!resizingTl.value) return
+  resizingTl.value = null
+  window.removeEventListener('pointermove', onResizeMoveTl)
+  window.removeEventListener('pointerup', stopResizeTl)
+}
+
+function startResizeTl(artId: number, event: PointerEvent): void {
+  event.preventDefault()
+  resizingTl.value = {
+    artId,
+    startX: event.clientX,
+    startWidth: getTlColumnWidth(artId),
+  }
+  window.addEventListener('pointermove', onResizeMoveTl)
+  window.addEventListener('pointerup', stopResizeTl)
+}
+
 onBeforeUnmount(() => {
   stopResize()
+  stopResizeTl()
+})
+
+const teilleistungsartenById = computed(() => {
+  const map = new Map<number, EnmTeilleistungsart>()
+  for (const art of enmStore.enmDaten?.teilleistungsarten ?? []) {
+    map.set(art.id, art)
+  }
+  return map
+})
+
+const teilleistungsartenInLerngruppe = computed<EnmTeilleistungsart[]>(() => {
+  const artIdSet = new Set<number>()
+  for (const s of schuelerListe.value) {
+    const ld = getLeistungsdaten(s)
+    for (const tl of ld?.teilleistungen ?? []) {
+      artIdSet.add(tl.artID)
+    }
+  }
+  return [...artIdSet]
+    .map((id) => teilleistungsartenById.value.get(id))
+    .filter((art): art is EnmTeilleistungsart => art !== undefined)
+    .sort((a, b) => a.sortierung - b.sortierung)
+})
+
+const showFehlstunden = ref(false)
+const showTeilleistungen = ref(false)
+const teilleistungInputEls = new Map<string, HTMLInputElement | null>()
+
+const editableFields = computed<EditField[]>(() => {
+  if (showTeilleistungen.value) {
+    return [
+      'noteQuartal',
+      'note',
+      ...teilleistungsartenInLerngruppe.value.map((art) => `teilleistung:${art.id}` as EditField),
+    ]
+  }
+  const fields: EditField[] = []
+  if (showFehlstunden.value) fields.push('fehlstundenFach', 'fehlstundenUnentschuldigtFach')
+  fields.push('noteQuartal', 'note', 'fachbezogeneBemerkungen')
+  return fields
 })
 
 function initEditValues(): void {
@@ -212,6 +301,12 @@ function initEditValues(): void {
       editKey(s.id, 'fachbezogeneBemerkungen'),
       bemerkungChange?.neuerWert ?? (ld?.fachbezogeneBemerkungen ?? ''),
     )
+    for (const art of teilleistungsartenInLerngruppe.value) {
+      const tlFeld: EditField = `teilleistung:${art.id}`
+      const tlChange = changeStore.getChange(s.id, lerngruppenId.value, tlFeld)
+      const tl = ld?.teilleistungen.find((t) => t.artID === art.id)
+      editValues.set(editKey(s.id, tlFeld), tlChange?.neuerWert ?? tl?.note ?? '')
+    }
   }
 }
 
@@ -222,6 +317,10 @@ watch(() => lerngruppenId.value, () => {
   fehlstundenFachInputs.value = []
   fehlstundenUnentschuldigtFachInputs.value = []
   bemerkungInputs.value = []
+  teilleistungInputEls.clear()
+  if (teilleistungsartenInLerngruppe.value.length === 0) {
+    showTeilleistungen.value = false
+  }
   initEditValues()
 }, { immediate: true })
 
@@ -312,6 +411,12 @@ function onRowClick(event: MouseEvent, index: number): void {
 }
 
 function focusFieldAt(index: number, feld: EditField): void {
+  if (feld.startsWith('teilleistung:')) {
+    const artId = parseInt(feld.split(':')[1] ?? '', 10)
+    const ai = teilleistungsartenInLerngruppe.value.findIndex((a) => a.id === artId)
+    if (ai >= 0) focusTeilleistungAt(index, ai)
+    return
+  }
   const input = (
     feld === 'note'
       ? noteInputs.value[index]
@@ -342,11 +447,15 @@ function originalFieldValue(schueler: EnmSchueler, feld: EditField): string {
   if (feld === 'noteQuartal') return ld.noteQuartal ?? ''
   if (feld === 'fehlstundenFach') return String(ld.fehlstundenFach)
   if (feld === 'fehlstundenUnentschuldigtFach') return String(ld.fehlstundenUnentschuldigtFach)
+  if (feld.startsWith('teilleistung:')) {
+    const artId = parseInt(feld.split(':')[1] ?? '', 10)
+    return ld.teilleistungen.find((t) => t.artID === artId)?.note ?? ''
+  }
   return ld.fachbezogeneBemerkungen ?? ''
 }
 
 function normalizeFieldValue(feld: EditField, rawValue: string): string {
-  if (feld === 'note' || feld === 'noteQuartal') {
+  if (feld === 'note' || feld === 'noteQuartal' || feld.startsWith('teilleistung:')) {
     return rawValue.trim().toUpperCase()
   }
   if (feld === 'fachbezogeneBemerkungen') {
@@ -358,7 +467,7 @@ function normalizeFieldValue(feld: EditField, rawValue: string): string {
 
 function isValidFieldValue(feld: EditField, normalized: string): boolean {
   if (normalized === '') return true
-  if (feld === 'note' || feld === 'noteQuartal') {
+  if (feld === 'note' || feld === 'noteQuartal' || feld.startsWith('teilleistung:')) {
     return VALID_NOTES.has(normalized)
   }
   if (feld === 'fachbezogeneBemerkungen') {
@@ -393,6 +502,9 @@ function commitField(
 
   const ld = getLeistungsdaten(schueler)
   const neuerWert = normalized === '' ? null : normalized
+  const isTl = feld.startsWith('teilleistung:')
+  const tlArtId = isTl ? parseInt(feld.split(':')[1] ?? '', 10) : NaN
+  const tl = isTl ? (ld?.teilleistungen.find((t) => t.artID === tlArtId) ?? null) : null
 
   changeStore.setChange({
     schuelerId:        schueler.id,
@@ -407,7 +519,9 @@ function commitField(
             ? (ld ? String(ld.fehlstundenFach) : null)
             : feld === 'fehlstundenUnentschuldigtFach'
               ? (ld ? String(ld.fehlstundenUnentschuldigtFach) : null)
-              : (ld?.fachbezogeneBemerkungen ?? null)
+              : isTl
+                ? (tl?.note ?? null)
+                : (ld?.fachbezogeneBemerkungen ?? null)
     ),
     neuerWert,
     geaendertAm:       new Date().toISOString(),
@@ -421,7 +535,9 @@ function commitField(
             ? (ld?.tsFehlstundenFach ?? '')
             : feld === 'fehlstundenUnentschuldigtFach'
               ? (ld?.tsFehlstundenUnentschuldigtFach ?? '')
-              : (ld?.tsFachbezogeneBemerkungen ?? '')
+              : isTl
+                ? (tl?.tsNote ?? '')
+                : (ld?.tsFachbezogeneBemerkungen ?? '')
     ),
   })
 
@@ -500,6 +616,20 @@ function onFieldKeydown(
     event.preventDefault()
     commitField(schueler, feld, input.value, index, false)
     nextTick(() => focusFieldAt(index - 1, feld))
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    commitField(schueler, feld, input.value, index, false)
+    const fields = editableFields.value
+    const i = fields.indexOf(feld)
+    const next = fields[i + 1]
+    if (i >= 0 && next !== undefined) nextTick(() => focusFieldAt(index, next))
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    commitField(schueler, feld, input.value, index, false)
+    const fields = editableFields.value
+    const i = fields.indexOf(feld)
+    const prev = fields[i - 1]
+    if (i > 0 && prev !== undefined) nextTick(() => focusFieldAt(index, prev))
   } else if (event.key === 'Escape') {
     event.preventDefault()
     // Zurück auf letzten committeten Wert
@@ -567,35 +697,135 @@ function closeFloskelDialog(): void {
   floskelDialog.value = ''
 }
 
-function applyFloskelDialog(value: string): void {
+function commitFloskelValue(value: string): void {
   const schueler = aktiverFloskelSchueler.value
   const index = floskelDialog.index
-
-  if (!schueler || index < 0) {
-    closeFloskelDialog()
-    return
-  }
+  if (!schueler || index < 0) return
 
   const input = bemerkungInputs.value[index]
-  if (input) {
-    input.value = value
-  }
+  if (input) input.value = value
 
   invalidIds.delete(invalidKey(schueler.id, 'fachbezogeneBemerkungen'))
   commitField(schueler, 'fachbezogeneBemerkungen', value, index, false)
-  closeFloskelDialog()
+}
 
-  nextTick(() => focusFieldAt(index, 'fachbezogeneBemerkungen'))
+function applyFloskelDialog(value: string): void {
+  if (!aktiverFloskelSchueler.value || floskelDialog.index < 0) return
+  commitFloskelValue(value)
+  floskelDialog.value = value
+}
+
+function navigateFloskelDialog(direction: 'prev' | 'next', entwurf: string): void {
+  const schueler = aktiverFloskelSchueler.value
+  if (schueler) {
+    const saved = editValues.get(editKey(schueler.id, 'fachbezogeneBemerkungen'))
+      ?? originalFieldValue(schueler, 'fachbezogeneBemerkungen')
+    if (entwurf !== saved) commitFloskelValue(entwurf)
+  }
+
+  const newIndex = direction === 'prev' ? floskelDialog.index - 1 : floskelDialog.index + 1
+  const newSchueler = schuelerListe.value[newIndex]
+  if (!newSchueler) return
+
+  floskelDialog.schuelerId = newSchueler.id
+  floskelDialog.index = newIndex
+  floskelDialog.value = editValues.get(editKey(newSchueler.id, 'fachbezogeneBemerkungen'))
+    ?? originalFieldValue(newSchueler, 'fachbezogeneBemerkungen')
 }
 
 function hasAnyRowChange(schueler: EnmSchueler): boolean {
-  return (
+  if (
     hasChange(schueler, 'note')
     || hasChange(schueler, 'noteQuartal')
     || hasChange(schueler, 'fehlstundenFach')
     || hasChange(schueler, 'fehlstundenUnentschuldigtFach')
     || hasChange(schueler, 'fachbezogeneBemerkungen')
-  )
+  ) return true
+  for (const art of teilleistungsartenInLerngruppe.value) {
+    if (hasChange(schueler, `teilleistung:${art.id}`)) return true
+  }
+  return false
+}
+
+function setTeilleistungInputRef(el: unknown, si: number, ai: number): void {
+  const mapKey = `${si}:${ai}`
+  if (el instanceof HTMLInputElement) {
+    teilleistungInputEls.set(mapKey, el)
+    const schueler = schuelerListe.value[si]
+    const art = teilleistungsartenInLerngruppe.value[ai]
+    if (schueler && art) {
+      const tlFeld: EditField = `teilleistung:${art.id}`
+      el.value = editValues.get(editKey(schueler.id, tlFeld)) ?? ''
+    }
+  } else {
+    teilleistungInputEls.set(mapKey, null)
+  }
+}
+
+function focusTeilleistungAt(si: number, ai: number): void {
+  const input = teilleistungInputEls.get(`${si}:${ai}`)
+  if (input) {
+    input.focus()
+    input.select()
+  }
+}
+
+function onTeilleistungInput(event: Event, schueler: EnmSchueler, si: number, ai: number, artId: number): void {
+  const input = event.target as HTMLInputElement
+  const upper = input.value.toUpperCase()
+  const tlFeld: EditField = `teilleistung:${artId}`
+  invalidIds.delete(invalidKey(schueler.id, tlFeld))
+  if (NOTES_AUTO_ADVANCE.has(upper)) {
+    input.value = upper
+    commitField(schueler, tlFeld, upper, si, false)
+    nextTick(() => focusTeilleistungAt(si + 1, ai))
+  }
+}
+
+function onTeilleistungBlur(event: FocusEvent, schueler: EnmSchueler, si: number, artId: number): void {
+  const input = event.target as HTMLInputElement
+  const normalized = input.value.toUpperCase()
+  if (input.value !== normalized) input.value = normalized
+  commitField(schueler, `teilleistung:${artId}`, normalized, si, false)
+}
+
+function onTeilleistungKeydown(
+  event: KeyboardEvent,
+  schueler: EnmSchueler,
+  si: number,
+  ai: number,
+  artId: number,
+): void {
+  const input = event.target as HTMLInputElement
+  const tlFeld: EditField = `teilleistung:${artId}`
+  if (event.key === 'Enter' || event.key === 'ArrowDown') {
+    event.preventDefault()
+    commitField(schueler, tlFeld, input.value, si, false)
+    nextTick(() => focusTeilleistungAt(si + 1, ai))
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    commitField(schueler, tlFeld, input.value, si, false)
+    nextTick(() => focusTeilleistungAt(si - 1, ai))
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault()
+    commitField(schueler, tlFeld, input.value, si, false)
+    const fields = editableFields.value
+    const i = fields.indexOf(tlFeld)
+    const next = fields[i + 1]
+    if (i >= 0 && next !== undefined) nextTick(() => focusFieldAt(si, next))
+  } else if (event.key === 'ArrowLeft') {
+    event.preventDefault()
+    commitField(schueler, tlFeld, input.value, si, false)
+    const fields = editableFields.value
+    const i = fields.indexOf(tlFeld)
+    const prev = fields[i - 1]
+    if (i > 0 && prev !== undefined) nextTick(() => focusFieldAt(si, prev))
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    const reverted = editValues.get(editKey(schueler.id, tlFeld)) ?? ''
+    input.value = reverted
+    invalidIds.delete(invalidKey(schueler.id, tlFeld))
+  }
 }
 
 // ── Statistiken ────────────────────────────────────────────────────────────
@@ -626,6 +856,33 @@ function goSave(): void {
         <span class="fach-badge">{{ fachKuerzel }}</span>
         <h1 class="noten-titel">{{ lerngruppe?.bezeichnung ?? 'Unbekannte Lerngruppe' }}</h1>
         <span v-if="fachBezeichnung" class="fach-bezeichnung">{{ fachBezeichnung }}</span>
+        <button
+          class="btn-toggle"
+          :class="{ 'btn-toggle-active': showFehlstunden }"
+          type="button"
+          :title="showFehlstunden ? 'Fehlstunden ausblenden' : 'Fehlstunden einblenden'"
+          @click="showFehlstunden = !showFehlstunden"
+        >
+          <svg class="toggle-icon" viewBox="0 0 36 20" width="28" height="16" aria-hidden="true">
+            <rect x="0.75" y="0.75" width="34.5" height="18.5" rx="9.25" />
+            <circle class="toggle-knob" cx="10" cy="10" r="7" />
+          </svg>
+          Fehlstunden
+        </button>
+        <button
+          v-if="teilleistungsartenInLerngruppe.length > 0"
+          class="btn-toggle"
+          :class="{ 'btn-toggle-active': showTeilleistungen }"
+          type="button"
+          :title="showTeilleistungen ? 'Teilleistungen ausblenden' : 'Teilleistungen einblenden'"
+          @click="showTeilleistungen = !showTeilleistungen"
+        >
+          <svg class="toggle-icon" viewBox="0 0 36 20" width="28" height="16" aria-hidden="true">
+            <rect x="0.75" y="0.75" width="34.5" height="18.5" rx="9.25" />
+            <circle class="toggle-knob" cx="10" cy="10" r="7" />
+          </svg>
+          Teilleistungen
+        </button>
       </div>
 
       <div class="noten-stats">
@@ -656,15 +913,23 @@ function goSave(): void {
 
       <div class="tabelle-wrapper">
         <table class="notentabelle">
-        <colgroup>
+        <colgroup v-if="!showTeilleistungen">
           <col :style="{ width: `${columnWidths.nr}px` }" />
           <col :style="{ width: `${columnWidths.name}px` }" />
           <col :style="{ width: `${columnWidths.klasse}px` }" />
-          <col :style="{ width: `${columnWidths.fsf}px` }" />
-          <col :style="{ width: `${columnWidths.fsu}px` }" />
+          <col v-if="showFehlstunden" :style="{ width: `${columnWidths.fsf}px` }" />
+          <col v-if="showFehlstunden" :style="{ width: `${columnWidths.fsu}px` }" />
           <col :style="{ width: `${columnWidths.quartal}px` }" />
           <col :style="{ width: `${columnWidths.note}px` }" />
           <col />
+        </colgroup>
+        <colgroup v-else>
+          <col :style="{ width: `${columnWidths.nr}px` }" />
+          <col :style="{ width: `${columnWidths.name}px` }" />
+          <col :style="{ width: `${columnWidths.klasse}px` }" />
+          <col :style="{ width: `${columnWidths.quartal}px` }" />
+          <col :style="{ width: `${columnWidths.note}px` }" />
+          <col v-for="art in teilleistungsartenInLerngruppe" :key="art.id" :style="{ width: `${getTlColumnWidth(art.id)}px` }" />
         </colgroup>
         <thead>
           <tr>
@@ -695,24 +960,26 @@ function goSave(): void {
                 @pointerdown="startResize('klasse', $event)"
               />
             </th>
-            <th class="col-fsf is-resizable">
-              <span>FSF</span>
-              <button
-                class="col-resizer"
-                type="button"
-                aria-label="Spalte FSF verbreitern oder verschmälern"
-                @pointerdown="startResize('fsf', $event)"
-              />
-            </th>
-            <th class="col-fsu is-resizable">
-              <span>FSU</span>
-              <button
-                class="col-resizer"
-                type="button"
-                aria-label="Spalte FSU verbreitern oder verschmälern"
-                @pointerdown="startResize('fsu', $event)"
-              />
-            </th>
+            <template v-if="!showTeilleistungen">
+              <th v-if="showFehlstunden" class="col-fsf is-resizable">
+                <span>FSF</span>
+                <button
+                  class="col-resizer"
+                  type="button"
+                  aria-label="Spalte FSF verbreitern oder verschmälern"
+                  @pointerdown="startResize('fsf', $event)"
+                />
+              </th>
+              <th v-if="showFehlstunden" class="col-fsu is-resizable">
+                <span>FSU</span>
+                <button
+                  class="col-resizer"
+                  type="button"
+                  aria-label="Spalte FSU verbreitern oder verschmälern"
+                  @pointerdown="startResize('fsu', $event)"
+                />
+              </th>
+            </template>
             <th class="col-quartal is-resizable">
               <span>Quartal</span>
               <button
@@ -731,9 +998,24 @@ function goSave(): void {
                 @pointerdown="startResize('note', $event)"
               />
             </th>
-            <th class="col-bemerkung">
+            <th v-if="!showTeilleistungen" class="col-bemerkung">
               <span>Fachbezogene Bemerkung</span>
             </th>
+            <template v-if="showTeilleistungen">
+              <th
+                v-for="art in teilleistungsartenInLerngruppe"
+                :key="art.id"
+                class="col-teilleistung is-resizable"
+              >
+                <span>{{ art.bezeichnung }}</span>
+                <button
+                  class="col-resizer"
+                  type="button"
+                  :aria-label="`Spalte ${art.bezeichnung} verbreitern oder verschmälern`"
+                  @pointerdown="startResizeTl(art.id, $event)"
+                />
+              </th>
+            </template>
           </tr>
         </thead>
         <tbody>
@@ -753,52 +1035,55 @@ function goSave(): void {
               >{{ schueler.vorname }}</span>
             </td>
             <td class="col-klasse">{{ klassenById.get(schueler.klasseID) ?? '' }}</td>
-            <td class="col-fsf">
-              <input
-                class="absence-input"
-                :class="{
-                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenFach')),
-                  'note-geaendert': hasChange(schueler, 'fehlstundenFach'),
-                }"
-                type="text"
-                inputmode="numeric"
-                autocomplete="off"
-                autocorrect="off"
-                spellcheck="false"
-                :placeholder="originalFieldValue(schueler, 'fehlstundenFach')"
-                :ref="(el) => setFehlstundenFachInputRef(el, idx)"
-                @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenFach')"
-                @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenFach')"
-                @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenFach')"
-                @focus="focusedRow = idx"
-              />
-            </td>
-            <td class="col-fsu">
-              <input
-                class="absence-input"
-                :class="{
-                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenUnentschuldigtFach')),
-                  'note-geaendert': hasChange(schueler, 'fehlstundenUnentschuldigtFach'),
-                }"
-                type="text"
-                inputmode="numeric"
-                autocomplete="off"
-                autocorrect="off"
-                spellcheck="false"
-                :placeholder="originalFieldValue(schueler, 'fehlstundenUnentschuldigtFach')"
-                :ref="(el) => setFehlstundenUnentschuldigtFachInputRef(el, idx)"
-                @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
-                @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
-                @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
-                @focus="focusedRow = idx"
-              />
-            </td>
+            <template v-if="!showTeilleistungen">
+              <td v-if="showFehlstunden" class="col-fsf">
+                <input
+                  class="absence-input"
+                  :class="{
+                    'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenFach')),
+                    'note-geaendert': hasChange(schueler, 'fehlstundenFach'),
+                  }"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  :placeholder="originalFieldValue(schueler, 'fehlstundenFach')"
+                  :ref="(el) => setFehlstundenFachInputRef(el, idx)"
+                  @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenFach')"
+                  @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenFach')"
+                  @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenFach')"
+                  @focus="focusedRow = idx"
+                />
+              </td>
+              <td v-if="showFehlstunden" class="col-fsu">
+                <input
+                  class="absence-input"
+                  :class="{
+                    'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenUnentschuldigtFach')),
+                    'note-geaendert': hasChange(schueler, 'fehlstundenUnentschuldigtFach'),
+                  }"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  :placeholder="originalFieldValue(schueler, 'fehlstundenUnentschuldigtFach')"
+                  :ref="(el) => setFehlstundenUnentschuldigtFachInputRef(el, idx)"
+                  @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                  @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                  @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                  @focus="focusedRow = idx"
+                />
+              </td>
+            </template>
             <td class="col-quartal">
               <input
                 class="note-input"
                 :class="{
                   'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'noteQuartal')),
                   'note-geaendert': hasChange(schueler, 'noteQuartal'),
+                  'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, 'noteQuartal')) ?? ''),
                 }"
                 type="text"
                 maxlength="2"
@@ -819,6 +1104,7 @@ function goSave(): void {
                 :class="{
                   'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'note')),
                   'note-geaendert': hasChange(schueler, 'note'),
+                  'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, 'note')) ?? ''),
                 }"
                 type="text"
                 maxlength="2"
@@ -833,7 +1119,34 @@ function goSave(): void {
                 @focus="focusedRow = idx"
               />
             </td>
-            <td class="col-bemerkung">
+            <template v-if="showTeilleistungen">
+              <td
+                v-for="(art, ai) in teilleistungsartenInLerngruppe"
+                :key="art.id"
+                class="col-teilleistung"
+              >
+                <input
+                  class="note-input"
+                  :class="{
+                    'note-invalid':   invalidIds.has(invalidKey(schueler.id, `teilleistung:${art.id}`)),
+                    'note-geaendert': hasChange(schueler, `teilleistung:${art.id}`),
+                    'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, `teilleistung:${art.id}`)) ?? ''),
+                  }"
+                  type="text"
+                  maxlength="2"
+                  autocomplete="off"
+                  autocorrect="off"
+                  spellcheck="false"
+                  :placeholder="originalFieldValue(schueler, `teilleistung:${art.id}`)"
+                  :ref="(el) => setTeilleistungInputRef(el, idx, ai)"
+                  @input="onTeilleistungInput($event, schueler, idx, ai, art.id)"
+                  @keydown="onTeilleistungKeydown($event, schueler, idx, ai, art.id)"
+                  @blur="onTeilleistungBlur($event, schueler, idx, art.id)"
+                  @focus="focusedRow = idx"
+                />
+              </td>
+            </template>
+            <td v-if="!showTeilleistungen" class="col-bemerkung">
               <div class="bemerkung-field">
                 <input
                   class="bemerkung-input"
@@ -889,8 +1202,13 @@ function goSave(): void {
       :jahrgaenge="jahrgaenge"
       :schueler="aktiverFloskelSchueler"
       :fach="fach"
+      :klasse-kuerzel="aktiverFloskelSchueler ? klassenById.get(aktiverFloskelSchueler.klasseID) : undefined"
+      :has-prev="floskelDialog.index > 0"
+      :has-next="floskelDialog.index < schuelerListe.length - 1"
       @close="closeFloskelDialog"
       @apply="applyFloskelDialog"
+      @navigate-prev="navigateFloskelDialog('prev', $event)"
+      @navigate-next="navigateFloskelDialog('next', $event)"
     />
 
   </main>
@@ -947,6 +1265,59 @@ function goSave(): void {
   opacity: 0.5;
   cursor: not-allowed;
   filter: none;
+}
+
+.btn-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+
+.btn-toggle:hover {
+  color: var(--color-text);
+}
+
+.btn-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-radius: 4px;
+}
+
+.btn-toggle-active {
+  color: var(--color-primary);
+}
+
+.toggle-icon rect {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  transition: fill 0.15s, stroke 0.15s;
+}
+
+.toggle-icon .toggle-knob {
+  fill: currentColor;
+  transform: translateX(0);
+  transition: transform 0.15s ease, fill 0.15s;
+}
+
+.btn-toggle-active .toggle-icon rect {
+  fill: currentColor;
+}
+
+.btn-toggle-active .toggle-icon .toggle-knob {
+  fill: white;
+  transform: translateX(16px);
 }
 
 .noten-header-info {
@@ -1192,6 +1563,18 @@ function goSave(): void {
   text-align: left;
 }
 
+.col-teilleistung {
+  white-space: nowrap;
+  text-align: left;
+  overflow: hidden;
+}
+
+.col-teilleistung span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .col-bemerkung {
   min-width: 0;
   width: auto;
@@ -1238,6 +1621,15 @@ function goSave(): void {
 .note-input.note-geaendert:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.note-input.note-schlecht,
+.note-input.note-geaendert.note-schlecht {
+  color: #dc2626;
+}
+:root[data-theme='dark'] .note-input.note-schlecht,
+:root[data-theme='dark'] .note-input.note-geaendert.note-schlecht {
+  color: #f87171;
 }
 
 .note-input.note-invalid {
@@ -1314,9 +1706,9 @@ function goSave(): void {
 
 .bemerkung-picker-button {
   flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface) 90%, white 10%);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
   color: var(--color-text);
   font-size: 0.78rem;
   font-weight: 700;
