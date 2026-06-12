@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 export type ThemePreference = 'light' | 'dark' | 'system'
 export type EffectiveTheme = 'light' | 'dark'
 
-const THEME_STORAGE_KEY = 'svws-gradehub.theme-preference'
+const THEME_STORAGE_KEY = 'dark-mode'
 
 function isThemePreference(value: string | null): value is ThemePreference {
   return value === 'light' || value === 'dark' || value === 'system'
@@ -22,8 +22,7 @@ export const useUIStore = defineStore('ui', () => {
   })
 
   function applyThemeToDocument(): void {
-    document.documentElement.dataset.theme = effectiveTheme.value
-    document.documentElement.style.colorScheme = effectiveTheme.value
+    document.documentElement.classList.toggle('dark', effectiveTheme.value === 'dark')
   }
 
   function setThemePreference(nextTheme: ThemePreference): void {

@@ -762,14 +762,11 @@ function goSave(): void {
 .badge-geaendert {
   background-color: var(--color-success-bg);
   border: 1px solid var(--color-success-border);
-  color: #166534;
+  color: var(--color-success-text);
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 600;
-}
-:root[data-theme='dark'] .badge-geaendert {
-  color: #86efac;
 }
 
 .btn {
@@ -783,7 +780,7 @@ function goSave(): void {
 .btn.primary {
   background: var(--color-primary);
   border-color: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary);
 }
 
 .btn.secondary {
@@ -831,7 +828,7 @@ th {
   top: 0;
   z-index: 12;
   background-color: color-mix(in srgb, var(--color-primary) 85%, #000 15%);
-  color: #ffffff;
+  color: var(--color-on-primary);
   border-bottom: 2px solid color-mix(in srgb, #000 35%, var(--color-primary));
   font-size: 0.95rem;
 }
@@ -871,11 +868,7 @@ th {
 
 .input.schlecht,
 .input.edited.schlecht {
-  color: #dc2626;
-}
-:root[data-theme='dark'] .input.schlecht,
-:root[data-theme='dark'] .input.edited.schlecht {
-  color: #f87171;
+  color: var(--color-error-text);
 }
 
 tr.changed td:first-child {

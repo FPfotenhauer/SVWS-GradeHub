@@ -1861,7 +1861,7 @@ button {
   padding: 0.5rem 0.625rem;
   width: fit-content;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--color-on-primary);
   background: var(--color-primary);
   border: 0;
   border-radius: 0.4rem;
@@ -1898,9 +1898,9 @@ button:disabled {
   padding: 0.35rem 0.8rem;
   font-size: 0.85rem;
   cursor: pointer;
-  color: #dc2626;
+  color: var(--color-error-text);
   background: transparent;
-  border: 1px solid #dc2626;
+  border: 1px solid var(--color-error-text);
   border-radius: 0.4rem;
 }
 
@@ -1925,7 +1925,7 @@ button:disabled {
 }
 
 .btn-logout:hover {
-  background: color-mix(in srgb, #dc2626 10%, transparent);
+  background: color-mix(in srgb, var(--color-error-text) 10%, transparent);
 }
 
 .toggle-label {
@@ -2116,9 +2116,9 @@ td.col-check input[type='checkbox'] {
   margin: 0;
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  color: var(--color-error, #dc2626);
-  background: color-mix(in srgb, var(--color-error, #dc2626) 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 30%, transparent);
+  color: var(--color-error-text);
+  background: color-mix(in srgb, var(--color-error-text) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-error-text) 30%, transparent);
 }
 
 .selection-info {
@@ -2127,13 +2127,13 @@ td.col-check input[type='checkbox'] {
 
 /* Schlüssel-Button aktiv (grün) */
 .btn-generate--aktiv {
-  color: #166534;
-  background: color-mix(in srgb, #16a34a 12%, var(--color-surface));
-  border-color: color-mix(in srgb, #16a34a 45%, var(--color-border));
+  color: var(--color-success-text);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
 }
 
 .btn-generate--aktiv:hover:not(:disabled) {
-  background: color-mix(in srgb, #16a34a 20%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary) 20%, var(--color-surface));
 }
 
 /* Modal */
@@ -2215,9 +2215,9 @@ td.col-check input[type='checkbox'] {
   padding: 0.6rem 0.8rem;
   border-radius: 0.4rem;
   font-size: 0.9rem;
-  color: #166534;
-  background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, #16a34a 30%, transparent);
+  color: var(--color-success-text);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .modal-success-icon {
@@ -2336,15 +2336,15 @@ td.col-check input[type='checkbox'] {
 }
 
 .versand-ok {
-  color: #166534;
-  background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, #16a34a 30%, transparent);
+  color: var(--color-success-text);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .versand-fehler {
-  color: var(--color-error, #dc2626);
-  background: color-mix(in srgb, var(--color-error, #dc2626) 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 30%, transparent);
+  color: var(--color-error-text);
+  background: color-mix(in srgb, var(--color-error-text) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-error-text) 30%, transparent);
 }
 
 .versand-kuerzel {
@@ -2391,18 +2391,18 @@ td.col-check input[type='checkbox'] {
 }
 
 .import-ok {
-  border-color: color-mix(in srgb, #16a34a 35%, transparent);
-  background: color-mix(in srgb, #16a34a 7%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 7%, var(--color-surface));
 }
 
 .import-gesendet {
-  border-color: color-mix(in srgb, #16a34a 50%, transparent);
-  background: color-mix(in srgb, #16a34a 12%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
 }
 
 .import-fehler {
-  border-color: color-mix(in srgb, var(--color-error, #dc2626) 35%, transparent);
-  background: color-mix(in srgb, var(--color-error, #dc2626) 7%, var(--color-surface));
+  border-color: color-mix(in srgb, var(--color-error-text) 35%, transparent);
+  background: color-mix(in srgb, var(--color-error-text) 7%, var(--color-surface));
 }
 
 .import-warnung {
@@ -2451,7 +2451,7 @@ td.col-check input[type='checkbox'] {
 .import-fehlertext {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--color-error, #dc2626);
+  color: var(--color-error-text);
 }
 
 .import-manuell {
@@ -2499,14 +2499,14 @@ td.col-check input[type='checkbox'] {
 }
 
 .smtp-test-ok {
-  color: #166534;
-  background: color-mix(in srgb, #16a34a 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, #16a34a 30%, transparent);
+  color: var(--color-success-text);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .smtp-test-fehler {
-  color: var(--color-error, #dc2626);
-  background: color-mix(in srgb, var(--color-error, #dc2626) 10%, var(--color-surface));
-  border: 1px solid color-mix(in srgb, var(--color-error, #dc2626) 30%, transparent);
+  color: var(--color-error-text);
+  background: color-mix(in srgb, var(--color-error-text) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-error-text) 30%, transparent);
 }
 </style>
