@@ -786,7 +786,7 @@ button:disabled {
 
 .primary {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary);
   border: 1px solid var(--color-primary);
 }
 

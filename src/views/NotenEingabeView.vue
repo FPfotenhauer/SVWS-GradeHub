@@ -1246,7 +1246,7 @@ function goSave(): void {
   border-radius: 6px;
   padding: 0.35rem 0.75rem;
   cursor: pointer;
-  color: #fff;
+  color: var(--color-on-primary);
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
@@ -1331,7 +1331,7 @@ function goSave(): void {
 
 .fach-badge {
   background-color: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary);
   padding: 0.2rem 0.55rem;
   border-radius: 4px;
   font-size: 0.78rem;
@@ -1372,14 +1372,11 @@ function goSave(): void {
 .stat-geaendert {
   background-color: var(--color-success-bg);
   border: 1px solid var(--color-success-border);
-  color: #166534;
+  color: var(--color-success-text);
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
   font-size: 0.78rem;
   font-weight: 600;
-}
-:root[data-theme='dark'] .stat-geaendert {
-  color: #86efac;
 }
 
 /* ── Tabelle ─────────────────────────────────────────────────────────────── */
@@ -1424,7 +1421,7 @@ function goSave(): void {
   top: 0;
   z-index: 12;
   background-color: color-mix(in srgb, var(--color-primary) 85%, #000 15%);
-  color: #ffffff;
+  color: var(--color-on-primary);
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -1613,10 +1610,7 @@ function goSave(): void {
 .note-input.note-geaendert {
   border-color: var(--color-success-border);
   background-color: var(--color-success-bg);
-  color: #166534;
-}
-:root[data-theme='dark'] .note-input.note-geaendert {
-  color: #86efac;
+  color: var(--color-success-text);
 }
 .note-input.note-geaendert:focus {
   border-color: var(--color-primary);
@@ -1625,11 +1619,7 @@ function goSave(): void {
 
 .note-input.note-schlecht,
 .note-input.note-geaendert.note-schlecht {
-  color: #dc2626;
-}
-:root[data-theme='dark'] .note-input.note-schlecht,
-:root[data-theme='dark'] .note-input.note-geaendert.note-schlecht {
-  color: #f87171;
+  color: var(--color-error-text);
 }
 
 .note-input.note-invalid {
@@ -1663,11 +1653,7 @@ function goSave(): void {
 .absence-input.note-geaendert {
   border-color: var(--color-success-border);
   background-color: var(--color-success-bg);
-  color: #166534;
-}
-
-:root[data-theme='dark'] .absence-input.note-geaendert {
-  color: #86efac;
+  color: var(--color-success-text);
 }
 
 .absence-input.note-invalid {
@@ -1697,11 +1683,7 @@ function goSave(): void {
 .bemerkung-input.note-geaendert {
   border-color: var(--color-success-border);
   background-color: var(--color-success-bg);
-  color: #166534;
-}
-
-:root[data-theme='dark'] .bemerkung-input.note-geaendert {
-  color: #86efac;
+  color: var(--color-success-text);
 }
 
 .bemerkung-picker-button {

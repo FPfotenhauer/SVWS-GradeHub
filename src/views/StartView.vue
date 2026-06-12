@@ -627,7 +627,7 @@ select {
 button {
   width: fit-content;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--color-on-primary);
   background: var(--color-primary);
   border: 0;
   border-radius: 0.4rem;
@@ -639,9 +639,9 @@ button:disabled {
 }
 
 button.secondary {
-  color: #dc2626;
+  color: var(--color-error-text);
   background: transparent;
-  border: 1px solid #dc2626;
+  border: 1px solid var(--color-error-text);
 }
 
 .help {

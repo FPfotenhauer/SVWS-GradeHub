@@ -274,7 +274,7 @@ function goSave(): void {
   border-radius: 6px;
   padding: 0.35rem 0.75rem;
   cursor: pointer;
-  color: #fff;
+  color: var(--color-on-primary);
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
