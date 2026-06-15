@@ -982,7 +982,7 @@ function istEncryptedZipPayload(value: unknown): value is EncryptedZipPayload {
 }
 
 function extrahiereKuerzelAusDateiname(name: string): string {
-  const match = /^([A-Za-z0-9]+)-enm[.\-_]/i.exec(name)
+  const match = /^([A-Za-z0-9ÄÖÜäöüß]+)-enm[.\-_]/i.exec(name)
   return match?.[1]?.toUpperCase() ?? ''
 }
 
