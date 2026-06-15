@@ -21,6 +21,15 @@ Mit dem enthaltenen `server.js` (Express) werden zusätzlich API-Endpunkte berei
 
 Im Server-Modus erscheint im Admin-Bereich der Button **Dateien versenden**.
 
+### Electron-Desktop-App
+
+Die App kann als native Desktop-Anwendung gebaut und ausgeliefert werden. Electron lädt den Offline-Build (`dist/`) und erweitert ihn um:
+
+- **CORS-Workaround**: Der SVWS-Server sendet `Access-Control-Allow-Origin: *` zusammen mit `Access-Control-Allow-Credentials: true` — laut CORS-Spezifikation ungültig. Der Electron-Hauptprozess (`electron/main.cjs`) ersetzt den Wildcard zur Laufzeit durch die tatsächliche Anfrage-Origin.
+- **Selbstsignierte Zertifikate**: SVWS-Server nutzen oft selbstsignierte TLS-Zertifikate. Die Electron-App akzeptiert diese automatisch.
+- **Admin-Modus aktiv**: `admintoolVisible` ist in der Electron-App immer auf `true` gesetzt.
+- **Zoom**: `Strg++` / `Strg+-` / `Strg+0` steuern den Zoom-Level.
+
 ---
 
 ## Technologie-Stack
@@ -52,6 +61,11 @@ Im Server-Modus erscheint im Admin-Bereich der Button **Dateien versenden**.
 │   └── config.js       — Laufzeit-Konfiguration (wird nach dist/ kopiert)
 ├── data/               — Beispiel- und Testdaten
 ├── docs/               — Projektdokumentation und ADRs
+├── electron/
+│   └── main.cjs        — Electron-Hauptprozess (CORS-Fix, Zoom, Menü)
+├── scripts/
+│   ├── release.mjs     — Release-Skript (alle Artefakte auf einmal)
+│   └── write-electron-config.mjs — Schreibt Electron-config.js nach dist/
 ├── server.js           — Express-Backend für E-Mail-Versand
 ├── vite.config.ts      — Vite-Konfiguration (Webserver-Build)
 ├── vite.offline.config.ts — Vite-Konfiguration (Offline-Build, IIFE)
@@ -104,6 +118,36 @@ Vite läuft auf Port 5173, das Backend auf Port 3000. `/api`-Anfragen werden aut
 | `npm run test` | Unit-Tests (Vitest) |
 | `npm run lint` | ESLint |
 | `npm run preview` | Build-Vorschau |
+| `npm run electron:dev` | Electron-App lokal starten (Linux, erfordert vorherigen Build) |
+| `npm run electron:build` | Electron-Installer für die aktuelle Plattform bauen |
+| `npm run release` | Alle Release-Artefakte in einem Schritt erzeugen (siehe unten) |
+
+---
+
+## Release
+
+```bash
+npm run release
+```
+
+Das Skript `scripts/release.mjs` erzeugt alle Artefakte in einem Schritt:
+
+1. `release/`-Verzeichnis bereinigen
+2. Offline-Build erstellen (`npm run build`)
+3. Webserver-ZIP packen (mit deaktiviertem Admin-Modus in `config.js`)
+4. `dist/config.js` auf Electron-Stand setzen (`admintoolVisible: true`)
+5. Electron-Installer für Linux und Windows bauen (`electron-builder`)
+6. `dist/config.js` zurücksetzen
+
+Erzeugte Artefakte im Ordner `release/`:
+
+| Datei | Beschreibung |
+|---|---|
+| `gradehub-{version}-webserver.zip` | Webserver-Bundle (dist + server.js + package.json) |
+| `gradehub-{version}.AppImage` | Linux Desktop-App (ausführbar, kein Setup nötig) |
+| `SVWS-GradeHub-Setup-{version}.exe` | Windows-Installer (NSIS) |
+
+> `npm run electron:build` baut nur den Installer für die **aktuelle Plattform**. Für Cross-Plattform-Builds (z. B. Windows-EXE auf Linux) wird `wine` benötigt oder ein CI-System empfohlen.
 
 ---
 
