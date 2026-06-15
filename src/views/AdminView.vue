@@ -1076,15 +1076,16 @@ async function verarbeiteImportDatei(file: File, passwortMapNachKuerzel: Map<str
     sendeFehler: '',
   }
   importEintraege.value.push(eintrag)
+  const reaktivEintrag = importEintraege.value.at(-1) ?? eintrag
 
   try {
-    await verarbeiteImportDateiInhalt(file, eintrag, passwortMapNachKuerzel)
-    if (eintrag.status === 'ausstehend') {
-      eintrag.status = 'ok'
+    await verarbeiteImportDateiInhalt(file, reaktivEintrag, passwortMapNachKuerzel)
+    if (reaktivEintrag.status === 'ausstehend') {
+      reaktivEintrag.status = 'ok'
     }
   } catch (error) {
-    eintrag.status = 'fehler'
-    eintrag.fehlerText = error instanceof Error ? error.message : 'Unbekannter Fehler.'
+    reaktivEintrag.status = 'fehler'
+    reaktivEintrag.fehlerText = error instanceof Error ? error.message : 'Unbekannter Fehler.'
   }
 }
 

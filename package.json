@@ -42,6 +42,9 @@
     "win": {
       "target": "nsis"
     },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
     "mac": {
       "target": "dmg"
     }
