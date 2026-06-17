@@ -10,7 +10,23 @@ const PORT = process.env.PORT ?? 3000
 app.use(express.json())
 app.use(express.static(join(__dirname, 'dist')))
 
+// CORS für den Fall, dass server.js separat neben einem anderen Webserver läuft
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(204)
+    return
+  }
+  next()
+})
+
 const PRIVATE_HOST_RE = /^(localhost$|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|0\.0\.0\.0$)/i
+
+app.get('/api/health', (_req, res) => {
+  res.status(200).send('ok')
+})
 
 app.post('/api/mail/test', async (req, res) => {
   const { host, port, user, password, tls } = req.body
@@ -80,6 +96,15 @@ app.get('/{*path}', (_req, res) => {
   res.sendFile(join(__dirname, 'dist', 'index.html'))
 })
 
-app.listen(PORT, () => {
-  console.log(`GradeHub-Server läuft auf http://localhost:${PORT}`)
-})
+export function startServer(port = PORT) {
+  return new Promise((resolve) => {
+    const server = app.listen(Number(port), () => {
+      console.log(`GradeHub-Server läuft auf http://localhost:${port}`)
+      resolve(server)
+    })
+  })
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  void startServer()
+}

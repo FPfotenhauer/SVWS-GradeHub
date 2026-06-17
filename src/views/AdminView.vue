@@ -41,7 +41,9 @@ function onThemeChange(event: Event): void {
   }
 }
 
-const läuftAufServer = window.location.protocol === 'http:' || window.location.protocol === 'https:'
+const mailServerUrl = ((window as Window & { GRADEHUB_CONFIG?: { mailServerUrl?: string } }).GRADEHUB_CONFIG?.mailServerUrl ?? '').replace(/\/$/, '')
+
+const läuftAufServer = ref<boolean>(false)
 const kannAnSVWSServerSenden = computed<boolean>(() =>
   authStore.baseUrl.trim() !== '' && authStore.schema.trim() !== '',
 )
@@ -219,9 +221,19 @@ async function kopiereNotenpasswort(passwort: string): Promise<void> {
   }
 }
 
+async function pruefeBackendVerfuegbar(): Promise<void> {
+  try {
+    const response = await fetch(`${mailServerUrl}/api/health`, { signal: AbortSignal.timeout(3000) })
+    läuftAufServer.value = response.ok
+  } catch {
+    läuftAufServer.value = false
+  }
+}
+
 onMounted(() => {
   ladeLehrerListe()
   void pruefeServerKonfiguration()
+  void pruefeBackendVerfuegbar()
 })
 
 function toggleAlle(): void {
@@ -955,7 +967,7 @@ async function versendeDateienFuerAuswahl(): Promise<void> {
       )
       const dateiname = `${zipFileName}.enc.json`
 
-      const response = await fetch('/api/mail/send', {
+      const response = await fetch(`${mailServerUrl}/api/mail/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: eintrag.emailDienstlich, filename: dateiname, content: verschluesselt, smtp: smtpKonfig }),
@@ -1026,7 +1038,7 @@ async function testeSmtpVerbindung(): Promise<void> {
   smtpTestMeldung.value = ''
 
   try {
-    const response = await fetch('/api/mail/test', {
+    const response = await fetch(`${mailServerUrl}/api/mail/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

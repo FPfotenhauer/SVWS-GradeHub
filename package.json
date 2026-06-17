@@ -1,7 +1,7 @@
 {
   "name": "svws-gradehub",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.2",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -34,6 +34,7 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "server.js",
       "package.json"
     ],
     "linux": {
