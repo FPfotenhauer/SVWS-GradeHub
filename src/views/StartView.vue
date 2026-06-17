@@ -8,6 +8,7 @@ import datenschutzMd from '../../docs/datenschutz.md?raw'
 import { useAuthStore } from '@/stores/authStore'
 import { useENMStore } from '@/stores/enmStore'
 import type { LehrerKurzinfo } from '@/stores/enmStore'
+import { encodeBasicAuth, base64NachArrayBuffer, leitenSchluesselAb } from '@/utils/crypto'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -96,31 +97,6 @@ type ENMStoreEncryptedCompat = typeof enmStore & {
   encryptedSourcePassword?: string
 }
 
-function encodeBasicAuth(user: string, pass: string): string {
-  return `Basic ${window.btoa(`${user}:${pass}`)}`
-}
-
-function base64NachArrayBuffer(value: string): ArrayBuffer {
-  return Uint8Array.from(window.atob(value), (c) => c.charCodeAt(0)).buffer.slice(0) as ArrayBuffer
-}
-
-async function leitenSchluesselAb(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
-  const keyMaterial = await window.crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  )
-
-  return window.crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 310_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt'],
-  )
-}
 
 function istEncryptedZipPayload(value: unknown): value is EncryptedZipPayload {
   if (typeof value !== 'object' || value === null) return false

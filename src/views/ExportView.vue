@@ -6,6 +6,7 @@ import { strToU8, zipSync } from 'fflate'
 import { useAuthStore } from '@/stores/authStore'
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
+import { arrayBufferNachBase64, arrayBufferAusUint8Array, leitenSchluesselAb } from '@/utils/crypto'
 
 import type { EnmExport, EnmLeistungsdaten } from '@/types/enm'
 import type { LeistungsFeld, LeistungsChange } from '@/types/changes'
@@ -392,31 +393,6 @@ async function saveAsFile(content: EnmExport): Promise<void> {
   await saveContentAsFile(json, suggestedName, 'ENM JSON', ['.json'])
 }
 
-function arrayBufferNachBase64(buffer: ArrayBuffer): string {
-  return window.btoa(String.fromCharCode(...new Uint8Array(buffer)))
-}
-
-function arrayBufferAusUint8Array(value: Uint8Array): ArrayBuffer {
-  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
-}
-
-async function leitenSchluesselAbFuerEncrypt(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
-  const keyMaterial = await window.crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  )
-
-  return window.crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 310_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt'],
-  )
-}
 
 async function baueEncryptedPayload(content: EnmExport): Promise<string> {
   const normalizedPassword = encryptedSourcePassword.value.trim()
@@ -433,7 +409,7 @@ async function baueEncryptedPayload(content: EnmExport): Promise<string> {
   const plainZip = arrayBufferAusUint8Array(zipBytes)
   const salt = window.crypto.getRandomValues(new Uint8Array(16)).buffer.slice(0) as ArrayBuffer
   const iv = window.crypto.getRandomValues(new Uint8Array(12)).buffer.slice(0) as ArrayBuffer
-  const key = await leitenSchluesselAbFuerEncrypt(normalizedPassword, salt)
+  const key = await leitenSchluesselAb(normalizedPassword, salt, ['encrypt'])
   const ciphertext = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainZip)
 
   const payload: EncryptedZipPayload = {
