@@ -220,6 +220,7 @@ async function kopiereNotenpasswort(passwort: string): Promise<void> {
 
 onMounted(() => {
   ladeLehrerListe()
+  void pruefeServerKonfiguration()
 })
 
 function toggleAlle(): void {
@@ -653,6 +654,64 @@ async function fuehreSpeichernDurch(): Promise<void> {
   }
 }
 
+async function speichereKonfigurationAufServer(encrypted: string): Promise<void> {
+  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
+  const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/client/config/gradehub/user/data`
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'PUT',
+      headers: {
+        Authorization: encodeBasicAuth(authStore.username, authStore.password),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(encrypted),
+    })
+  } catch {
+    throw new Error('Netzwerkfehler beim Zugriff auf den SVWS-Server.')
+  }
+  if (!response.ok) {
+    throw new Error(`Konfiguration konnte nicht auf dem Server gespeichert werden (${response.status}).`)
+  }
+}
+
+async function fuehreServerSpeichernDurch(): Promise<void> {
+  if (speichernKennwort.value.length < 8) {
+    speichernFehler.value = 'Das Kennwort muss mindestens 8 Zeichen lang sein.'
+    return
+  }
+  if (speichernKennwort.value !== speichernKennwortBestaetigung.value) {
+    speichernFehler.value = 'Die Kennwörter stimmen nicht überein.'
+    return
+  }
+  speichernFehler.value = ''
+  speichernLaeuft.value = true
+  try {
+    const daten = {
+      schluessel: {
+        oeffentlich: oeffentlicherSchluesselPem.value || null,
+        privat: privaterSchluesselPem.value || null,
+      },
+      lehrer: lehrer.value.map((l) => ({ id: l.id, kuerzel: l.kuerzel, notenpasswort: l.notenpasswort })),
+      smtp: smtpHost.value.trim() !== '' ? {
+        host: smtpHost.value.trim(),
+        port: parseInt(smtpPort.value, 10) || 587,
+        user: smtpUser.value,
+        password: smtpPassword.value,
+        from: smtpFrom.value,
+        tls: smtpTls.value,
+      } : null,
+    }
+    const encrypted = await aesVerschluesseln(JSON.stringify(daten, null, 2), speichernKennwort.value)
+    await speichereKonfigurationAufServer(encrypted)
+    speichernModalOffen.value = false
+  } catch (error) {
+    speichernFehler.value = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.'
+  } finally {
+    speichernLaeuft.value = false
+  }
+}
+
 // --- Laden-Modal ---
 const ladenModalOffen = ref<boolean>(false)
 const ladenKennwort = ref<string>('')
@@ -660,6 +719,7 @@ const ladenFehler = ref<string>('')
 const ladenLaeuft = ref<boolean>(false)
 const ladenDateiName = ref<string>('')
 const ladenDateiText = ref<string>('')
+const serverKonfigVorhanden = ref<boolean>(false)
 
 function laden(): void {
   ladenKennwort.value = ''
@@ -667,6 +727,30 @@ function laden(): void {
   ladenDateiName.value = ''
   ladenDateiText.value = ''
   ladenModalOffen.value = true
+}
+
+async function pruefeServerKonfiguration(): Promise<void> {
+  if (!kannAnSVWSServerSenden.value) return
+  try {
+    const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
+    const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/client/config/gradehub/user/data`
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: encodeBasicAuth(authStore.username, authStore.password),
+        Accept: 'application/json',
+      },
+    })
+    if (!response.ok) return
+    const text = await response.text()
+    let value: unknown
+    try { value = JSON.parse(text) } catch { return }
+    if (typeof value !== 'string' || value.trim() === '') return
+    serverKonfigVorhanden.value = true
+    laden()
+  } catch {
+    // Startprüfung still ignorieren
+  }
 }
 
 function schliesseLabenModal(): void {
@@ -726,6 +810,71 @@ async function fuehreLabenDurch(): Promise<void> {
     ladenFehler.value = 'Entschlüsselung fehlgeschlagen. Falsches Kennwort oder beschädigte Datei.'
   } finally {
     ladenLaeuft.value = false
+  }
+}
+
+const ladenVomServerLaeuft = ref<boolean>(false)
+
+async function ladeKonfigurationVomServer(): Promise<string> {
+  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
+  const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/client/config/gradehub/user/data`
+  let response: Response
+  try {
+    response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: encodeBasicAuth(authStore.username, authStore.password),
+        Accept: 'application/json',
+      },
+    })
+  } catch {
+    throw new Error('Netzwerkfehler beim Zugriff auf den SVWS-Server.')
+  }
+  if (!response.ok) {
+    if (response.status === 404) throw new Error('Keine gespeicherte Konfiguration auf dem Server gefunden.')
+    throw new Error(`Konfiguration konnte nicht geladen werden (${response.status}).`)
+  }
+  const text = await response.text()
+  const parsed: unknown = JSON.parse(text)
+  return typeof parsed === 'string' ? parsed : text
+}
+
+async function fuehreServerLabenDurch(): Promise<void> {
+  if (!ladenKennwort.value) {
+    ladenFehler.value = 'Bitte das Kennwort eingeben.'
+    return
+  }
+  ladenFehler.value = ''
+  ladenVomServerLaeuft.value = true
+  try {
+    const encryptedJson = await ladeKonfigurationVomServer()
+    const plaintext = await aesEntschluesseln(encryptedJson, ladenKennwort.value)
+    const daten = JSON.parse(plaintext) as {
+      schluessel: { oeffentlich: string | null; privat: string | null }
+      lehrer: { id: number; kuerzel: string; notenpasswort: string }[]
+      smtp?: { host: string; port: number; user: string; password: string; from: string; tls: boolean } | null
+    }
+    oeffentlicherSchluesselPem.value = daten.schluessel.oeffentlich ?? ''
+    privaterSchluesselPem.value = daten.schluessel.privat ?? ''
+    schluesselGeneriert.value = !!(daten.schluessel.oeffentlich && daten.schluessel.privat)
+    const passwortMap = new Map(daten.lehrer.map((l) => [l.id, l.notenpasswort]))
+    lehrer.value = lehrer.value.map((l) => ({
+      ...l,
+      notenpasswort: passwortMap.get(l.id) ?? l.notenpasswort,
+    }))
+    if (daten.smtp) {
+      smtpHost.value = daten.smtp.host
+      smtpPort.value = String(daten.smtp.port)
+      smtpUser.value = daten.smtp.user
+      smtpPassword.value = daten.smtp.password
+      smtpFrom.value = daten.smtp.from
+      smtpTls.value = daten.smtp.tls
+    }
+    ladenModalOffen.value = false
+  } catch (error) {
+    ladenFehler.value = error instanceof Error ? error.message : 'Laden oder Entschlüsselung fehlgeschlagen.'
+  } finally {
+    ladenVomServerLaeuft.value = false
   }
 }
 
@@ -1512,7 +1661,9 @@ onUnmounted(() => {
           <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSpeichernModal">✕</button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Die Daten werden mit AES-256-GCM verschlüsselt gespeichert.</p>
+          <p class="modal-meta">
+            Die Daten werden mit AES-256-GCM verschlüsselt. Auf dem SVWS-Server gespeicherte Konfiguration kann von jedem Gerät geladen werden.
+          </p>
           <p v-if="speichernFehler" class="error">{{ speichernFehler }}</p>
           <label class="modal-form-label" for="speichern-pw">Kennwort</label>
           <input
@@ -1536,12 +1687,21 @@ onUnmounted(() => {
         <div class="modal-footer">
           <button class="btn-generate" type="button" @click="schliesseSpeichernModal">Abbrechen</button>
           <button
-            class="btn-generate btn-generate--aktiv"
+            class="btn-generate"
             type="button"
             :disabled="speichernLaeuft"
             @click="fuehreSpeichernDurch"
           >
-            {{ speichernLaeuft ? 'Wird gespeichert…' : 'Speichern & herunterladen' }}
+            {{ speichernLaeuft ? 'Wird gespeichert…' : 'Als Datei herunterladen' }}
+          </button>
+          <button
+            v-if="kannAnSVWSServerSenden"
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="speichernLaeuft"
+            @click="fuehreServerSpeichernDurch"
+          >
+            {{ speichernLaeuft ? 'Wird gespeichert…' : 'Auf Server speichern' }}
           </button>
         </div>
       </div>
@@ -1555,7 +1715,15 @@ onUnmounted(() => {
           <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseLabenModal">✕</button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Verschlüsselte GradeHub-Konfigurationsdatei (.ghb) auswählen.</p>
+          <p class="modal-meta">
+            Konfiguration vom SVWS-Server oder aus einer Sicherungsdatei (.ghb) laden.
+          </p>
+          <div
+            v-if="serverKonfigVorhanden"
+            class="modal-server-hinweis"
+          >
+            Gespeicherte Konfiguration auf dem Server gefunden — Kennwort eingeben und „Vom Server laden" klicken.
+          </div>
           <p v-if="ladenFehler" class="error">{{ ladenFehler }}</p>
           <label class="modal-form-label" for="laden-datei">Datei</label>
           <div class="modal-file-row">
@@ -1582,12 +1750,21 @@ onUnmounted(() => {
         <div class="modal-footer">
           <button class="btn-generate" type="button" @click="schliesseLabenModal">Abbrechen</button>
           <button
-            class="btn-generate btn-generate--aktiv"
+            class="btn-generate"
             type="button"
-            :disabled="ladenLaeuft"
+            :disabled="ladenLaeuft || ladenVomServerLaeuft"
             @click="fuehreLabenDurch"
           >
-            {{ ladenLaeuft ? 'Wird geladen…' : 'Laden' }}
+            {{ ladenLaeuft ? 'Wird geladen…' : 'Aus Datei laden' }}
+          </button>
+          <button
+            v-if="kannAnSVWSServerSenden"
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="ladenLaeuft || ladenVomServerLaeuft"
+            @click="fuehreServerLabenDurch"
+          >
+            {{ ladenVomServerLaeuft ? 'Wird geladen…' : 'Vom Server laden' }}
           </button>
         </div>
       </div>
@@ -2490,6 +2667,15 @@ td.col-check input[type='checkbox'] {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.modal-server-hinweis {
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.4rem;
+  font-size: 0.88rem;
+  color: var(--color-success-text);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .smtp-test-ok,

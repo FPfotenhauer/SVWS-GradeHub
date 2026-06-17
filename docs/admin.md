@@ -16,7 +16,7 @@ Eine kompakte Schritt-fuer-Schritt-Version mit Screenshots finden Sie hier: [Adm
 - Erzeugung verschlüsselter Lehrerdateien (`.enc.json`)
 - **Versand der Lehrerdateien per E-Mail** (nur Server-Modus)
 - Import zurückgegebener Notendateien und Rückschreiben an den SVWS-Server
-- Sicheres Speichern und Laden der Konfiguration als verschlüsselte GradeHub-Datei (`.ghb`)
+- Sicheres Speichern und Laden der Konfiguration — direkt auf dem SVWS-Server oder als lokale Sicherungsdatei (`.ghb`)
 
 ---
 
@@ -102,10 +102,29 @@ Klicken Sie auf **Dateien importieren**:
 
 ### 7. Konfiguration speichern und wieder laden
 
-- **Speichern** erstellt eine verschlüsselte Konfigurationsdatei (`gradehub-config.ghb`), die Notenpasswörter, Schlüssel und SMTP-Einstellungen enthält.
-- **Laden** stellt die gespeicherte Konfiguration über das eingegebene Kennwort wieder her.
+Die Konfiguration enthält alle Notenpasswörter, das RSA-Schlüsselpaar und die SMTP-Einstellungen. Sie wird stets mit AES-256-GCM und einem selbst gewählten Kennwort verschlüsselt — unabhängig davon, wo sie gespeichert wird.
 
-> Speichern Sie die Konfiguration nach jeder Änderung (neue Passwörter, neues Schlüsselpaar, geänderte SMTP-Daten), damit Sie beim nächsten Sitzungsstart nahtlos weitermachen können.
+#### Auf dem SVWS-Server speichern (empfohlen)
+
+Klicken Sie auf **Speichern** und dann auf **Auf Server speichern**.
+Die verschlüsselten Daten werden über den Endpunkt `PUT /db/{schema}/client/config/gradehub/user/data` auf dem SVWS-Server abgelegt.
+
+- Die Konfiguration ist an den angemeldeten Benutzer gebunden und steht von jedem Gerät aus zur Verfügung.
+- Beim nächsten Öffnen des Adminbereichs erkennt die App automatisch, dass Daten auf dem Server vorhanden sind, und fordert das Kennwort an.
+
+#### Als Datei herunterladen (Sicherungskopie)
+
+Klicken Sie auf **Speichern** und dann auf **Als Datei herunterladen**.
+Die Konfiguration wird als `gradehub-config.ghb` heruntergeladen und kann als Backup oder zur Übertragung auf ein anderes Gerät verwendet werden.
+
+#### Konfiguration laden
+
+Klicken Sie auf **Laden**:
+
+- **Vom Server laden** — Ruft die auf dem SVWS-Server gespeicherte Konfiguration ab und entschlüsselt sie mit dem eingegebenen Kennwort. Diese Schaltfläche erscheint nur, wenn ein SVWS-Server verbunden ist.
+- **Aus Datei laden** — Lädt eine lokal gespeicherte `.ghb`-Datei und entschlüsselt sie mit dem eingegebenen Kennwort.
+
+> **Empfehlung:** Speichern Sie die Konfiguration nach jeder Änderung (neue Passwörter, neues Schlüsselpaar, geänderte SMTP-Daten) auf dem Server, damit Sie beim nächsten Sitzungsstart nahtlos weitermachen können. Erstellen Sie zusätzlich regelmäßig eine lokale Sicherungskopie als `.ghb`-Datei.
 
 ---
 
@@ -113,6 +132,7 @@ Klicken Sie auf **Dateien importieren**:
 
 - Bewahren Sie den privaten Schlüssel geheim auf — er wird nur im Adminbereich benötigt.
 - Geben Sie die Konfigurationsdatei (`.ghb`) und den privaten Schlüssel nicht unbefugt weiter.
-- Verwenden Sie für die Konfigurationsdatei ein starkes Kennwort mit mindestens 8 Zeichen.
-- Die SMTP-Zugangsdaten werden nur verschlüsselt in der `.ghb`-Datei gespeichert; im Arbeitsspeicher existieren sie nur während der aktuellen Sitzung.
+- Verwenden Sie für die Konfiguration ein starkes Kennwort mit mindestens 8 Zeichen — sowohl für die Server-Speicherung als auch für die lokale Datei.
+- Die auf dem SVWS-Server gespeicherte Konfiguration ist benutzergebunden und verschlüsselt; der Server sieht zu keinem Zeitpunkt das Klartext-Kennwort.
+- Die SMTP-Zugangsdaten werden nur verschlüsselt gespeichert; im Arbeitsspeicher existieren sie nur während der aktuellen Sitzung.
 - Stellen Sie sicher, dass die Lehrerdateien nur mit dem jeweils zugehörigen Notenpasswort geöffnet werden können.
