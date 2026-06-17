@@ -2,22 +2,16 @@
 import { storeToRefs } from 'pinia'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { strToU8, zipSync, unzipSync, strFromU8, decompressSync } from 'fflate'
-import { jsPDF } from 'jspdf'
 import { useAuthStore } from '@/stores/authStore'
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 import { useUIStore } from '@/stores/uiStore'
-
-interface LehrerEintrag {
-  id: number
-  kuerzel: string
-  nachname: string
-  vorname: string
-  emailDienstlich: string
-  notenpasswort: string
-  istAktiv: boolean
-}
+import { useSchluessel } from '@/composables/useSchluessel'
+import { useSmtp } from '@/composables/useSmtp'
+import { useTeacherAdmin } from '@/composables/useTeacherAdmin'
+import { useKonfiguration } from '@/composables/useKonfiguration'
+import { useVersand } from '@/composables/useVersand'
+import { useImport } from '@/composables/useImport'
 
 const authStore = useAuthStore()
 const changeStore = useChangeStore()
@@ -26,10 +20,160 @@ const uiStore = useUIStore()
 const router = useRouter()
 const { themePreference } = storeToRefs(uiStore)
 
+const mailServerUrl = ((window as Window & { GRADEHUB_CONFIG?: { mailServerUrl?: string } }).GRADEHUB_CONFIG?.mailServerUrl ?? '').replace(/\/$/, '')
+
+const läuftAufServer = ref<boolean>(false)
+const kannAnSVWSServerSenden = computed<boolean>(() =>
+  authStore.baseUrl.trim() !== '' && authStore.schema.trim() !== '',
+)
+
+const {
+  schluesselModalOffen,
+  schluesselGeneriert,
+  schluesselGenerierenLaeuft,
+  schluesselFehler,
+  oeffentlicherSchluesselPem,
+  privaterSchluesselPem,
+  generiereSchluessel,
+  schliesseSchluesselModal,
+  fuehreSchluesselGenerierungDurch,
+} = useSchluessel()
+
+const {
+  smtpModalOffen,
+  smtpFehler,
+  smtpHost,
+  smtpPort,
+  smtpUser,
+  smtpPassword,
+  smtpFrom,
+  smtpTls,
+  smtpTestLaeuft,
+  smtpTestErfolg,
+  smtpTestMeldung,
+  oeffneSmtpModal,
+  schliesseSmtpModal,
+  speichereSmtpKonfiguration,
+  testeSmtpVerbindung,
+} = useSmtp(mailServerUrl)
+
+const {
+  lehrer,
+  ausgewaehlt,
+  nurAktive,
+  isLoading,
+  errorMessage,
+  sichtbareLehrer,
+  alleAusgewaehlt,
+  ladeLehrerListe,
+  ladeENMJsonFuerLehrer,
+  toggleAuswahl,
+  toggleAlle,
+  generierePasswoerterFuerAuswahl,
+  kopiereNotenpasswort,
+  druckePasswortStreifen,
+  erzeugeDateienFuerAuswahl: _erzeugeDateienFuerAuswahl,
+  spaltenStil,
+  onResizeEnd,
+  starteResize,
+} = useTeacherAdmin(authStore)
+
+function erzeugeeDateien(): void {
+  void _erzeugeDateienFuerAuswahl(oeffentlicherSchluesselPem.value)
+}
+
+const {
+  konfigKennwort,
+  speichernModalOffen,
+  speichernKennwort,
+  speichernKennwortBestaetigung,
+  speichernFehler,
+  speichernLaeuft,
+  ladenModalOffen,
+  ladenKennwort,
+  ladenFehler,
+  ladenLaeuft,
+  ladenDateiName,
+  serverKonfigVorhanden,
+  ladenVomServerLaeuft,
+  speichern,
+  schliesseSpeichernModal,
+  fuehreSpeichernDurch,
+  fuehreServerSpeichernDurch,
+  laden,
+  pruefeServerKonfiguration,
+  schliesseLadenModal,
+  onLadenDateiGewaehlt,
+  fuehreLadenDurch,
+  fuehreServerLabenDurch,
+} = useKonfiguration({
+  lehrer,
+  oeffentlicherSchluesselPem,
+  privaterSchluesselPem,
+  schluesselGeneriert,
+  smtpHost,
+  smtpPort,
+  smtpUser,
+  smtpPassword,
+  smtpFrom,
+  smtpTls,
+  kannAnSVWSServerSenden,
+  authStore,
+})
+
+const {
+  versandModalOffen,
+  versandErgebnisse,
+  versandLaeuft,
+  versandFortschritt,
+  versandGesamt,
+  schliesseVersandModal,
+  versendeDateienFuerAuswahl,
+} = useVersand({
+  lehrer,
+  ausgewaehlt,
+  oeffentlicherSchluesselPem,
+  smtpHost,
+  smtpPort,
+  smtpUser,
+  smtpPassword,
+  smtpFrom,
+  smtpTls,
+  isLoading,
+  errorMessage,
+  ladeENMJsonFuerLehrer,
+  mailServerUrl,
+})
+
+const {
+  importModalOffen,
+  importEintraege,
+  importLaeuft,
+  importAllesendenLaeuft,
+  importErfolgreicheAnzahl,
+  oeffneImportModal,
+  schliesseImportModal,
+  resetImport,
+  importStatusText,
+  importEintragKlasse,
+  waehleImportOrdner,
+  onImportDateienGewaehlt,
+  verarbeiteEintragNochmal,
+  sendeEintragAnServer,
+  sendeAlleAnServer,
+} = useImport({
+  lehrer,
+  sichtbareLehrer,
+  kannAnSVWSServerSenden,
+  errorMessage,
+  authStore,
+})
+
 function logout(): void {
   changeStore.reset()
   enmStore.reset()
   authStore.clear()
+  konfigKennwort.value = ''
   router.push('/')
 }
 
@@ -40,1223 +184,20 @@ function onThemeChange(event: Event): void {
   }
 }
 
-const läuftAufServer = window.location.protocol === 'http:' || window.location.protocol === 'https:'
-const kannAnSVWSServerSenden = computed<boolean>(() =>
-  authStore.baseUrl.trim() !== '' && authStore.schema.trim() !== '',
-)
-
-const isLoading = ref<boolean>(false)
-const errorMessage = ref<string>('')
-const lehrer = ref<LehrerEintrag[]>([])
-const ausgewaehlt = ref<Set<number>>(new Set())
-const nurAktive = ref<boolean>(true)
-
-type SpaltenKey = 'kuerzel' | 'name' | 'email' | 'passwort'
-
-const spaltenBreiten = ref<Record<SpaltenKey, number>>({
-  kuerzel: 96,
-  name: 240,
-  email: 220,
-  passwort: 260,
-})
-
-const minBreiten: Record<SpaltenKey, number> = {
-  kuerzel: 32,
-  name: 72,
-  email: 60,
-  passwort: 60,
-}
-
-let resizing: {
-  key: SpaltenKey
-  startX: number
-  startWidth: number
-} | null = null
-
-const sichtbareLehrer = computed<LehrerEintrag[]>(() => {
-  const liste = nurAktive.value ? lehrer.value.filter((l) => l.istAktiv) : lehrer.value
-  return [...liste].sort((a, b) => a.kuerzel.localeCompare(b.kuerzel, 'de'))
-})
-
-const alleAusgewaehlt = computed<boolean>(() => {
-  return sichtbareLehrer.value.length > 0 && sichtbareLehrer.value.every((l) => ausgewaehlt.value.has(l.id))
-})
-
-function encodeBasicAuth(user: string, pass: string): string {
-  return `Basic ${window.btoa(`${user}:${pass}`)}`
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
-function mapLehrer(value: unknown): LehrerEintrag | null {
-  if (!isRecord(value)) return null
-  const id = value.id
-  const kuerzel = value.kuerzel
-  const nachname = value.nachname
-  const vorname = value.vorname
-  const notenpasswortRaw = value.notenpasswort ?? value.passwort ?? value.password ?? value.tsNotenpasswort
-  if (typeof id !== 'number' || typeof kuerzel !== 'string') return null
-  const istAktivRaw = value.istAktiv ?? value.aktiv ?? value.istSichtbar
-  return {
-    id,
-    kuerzel,
-    nachname: typeof nachname === 'string' ? nachname : '',
-    vorname: typeof vorname === 'string' ? vorname : '',
-    emailDienstlich: '',
-    notenpasswort: typeof notenpasswortRaw === 'string' ? notenpasswortRaw : '',
-    istAktiv: typeof istAktivRaw === 'boolean' ? istAktivRaw : true,
-  }
-}
-
-async function ladeEmailAdressen(): Promise<void> {
-  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
-  const results = await Promise.allSettled(
-    lehrer.value.map(async (eintrag) => {
-      const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/lehrer/${eintrag.id}/stammdaten`
-      const response = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Authorization: encodeBasicAuth(authStore.username, authStore.password),
-          Accept: 'application/json',
-        },
-      })
-      if (!response.ok) return { id: eintrag.id, email: '' }
-      const data: unknown = await response.json()
-      if (!isRecord(data)) return { id: eintrag.id, email: '' }
-      return {
-        id: eintrag.id,
-        email: typeof data.emailDienstlich === 'string' ? data.emailDienstlich : '',
-      }
-    }),
-  )
-
-  const emailMap = new Map<number, string>()
-  for (const result of results) {
-    if (result.status === 'fulfilled') {
-      emailMap.set(result.value.id, result.value.email)
-    }
-  }
-
-  lehrer.value = lehrer.value.map((eintrag) => ({
-    ...eintrag,
-    emailDienstlich: emailMap.get(eintrag.id) ?? '',
-  }))
-}
-
-async function ladeLehrerListe(): Promise<void> {
-  errorMessage.value = ''
-  isLoading.value = true
-  ausgewaehlt.value = new Set()
-  lehrer.value = []
-
+async function pruefeBackendVerfuegbar(): Promise<void> {
   try {
-    const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
-    const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/lehrer`
-    let response: Response
-
-    try {
-      response = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          Authorization: encodeBasicAuth(authStore.username, authStore.password),
-          Accept: 'application/json',
-        },
-      })
-    } catch {
-      throw new Error(`Netzwerkfehler beim Zugriff auf ${endpoint}. Bitte URL, Protokoll und CORS pruefen.`)
-    }
-
-    if (!response.ok) {
-      throw new Error(`Lehrerliste konnte nicht geladen werden (${response.status}).`)
-    }
-
-    const data: unknown = await response.json()
-    if (!Array.isArray(data)) {
-      throw new Error('Lehrerliste hat ein ungueltiges Format.')
-    }
-
-    lehrer.value = data.map(mapLehrer).filter((l): l is LehrerEintrag => l !== null)
-    void ladeEmailAdressen()
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Lehrerliste konnte nicht geladen werden.'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-function toggleAuswahl(id: number): void {
-  if (ausgewaehlt.value.has(id)) {
-    ausgewaehlt.value.delete(id)
-  } else {
-    ausgewaehlt.value.add(id)
-  }
-}
-
-async function kopiereNotenpasswort(passwort: string): Promise<void> {
-  if (passwort.trim() === '') return
-  errorMessage.value = ''
-
-  try {
-    await window.navigator.clipboard.writeText(passwort)
+    const response = await fetch(`${mailServerUrl}/api/health`, { signal: AbortSignal.timeout(3000) })
+    läuftAufServer.value = response.ok
   } catch {
-    const fallbackInput = document.createElement('textarea')
-    fallbackInput.value = passwort
-    fallbackInput.setAttribute('readonly', '')
-    fallbackInput.style.position = 'fixed'
-    fallbackInput.style.left = '-9999px'
-    document.body.appendChild(fallbackInput)
-    fallbackInput.select()
-
-    const ok = document.execCommand('copy')
-    document.body.removeChild(fallbackInput)
-
-    if (!ok) {
-      errorMessage.value = 'Notenpasswort konnte nicht in die Zwischenablage kopiert werden.'
-    }
+    läuftAufServer.value = false
   }
 }
 
 onMounted(() => {
-  ladeLehrerListe()
+  void ladeLehrerListe()
+  void pruefeServerKonfiguration()
+  void pruefeBackendVerfuegbar()
 })
-
-function toggleAlle(): void {
-  if (alleAusgewaehlt.value) {
-    for (const l of sichtbareLehrer.value) {
-      ausgewaehlt.value.delete(l.id)
-    }
-  } else {
-    for (const l of sichtbareLehrer.value) {
-      ausgewaehlt.value.add(l.id)
-    }
-  }
-}
-
-function randomAlphanumeric(length: number): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-  let result = ''
-  const values = window.crypto.getRandomValues(new Uint8Array(length))
-  for (let i = 0; i < length; i++) {
-    const randomByte = values.at(i) ?? 0
-    result += chars.charAt(randomByte % chars.length)
-  }
-  return result
-}
-
-function generiereNotenpasswort(): string {
-  return [
-    randomAlphanumeric(4),
-    randomAlphanumeric(4),
-    randomAlphanumeric(4),
-    randomAlphanumeric(4),
-    randomAlphanumeric(4),
-    randomAlphanumeric(4),
-  ].join('-')
-}
-
-function generierePasswoerterFuerAuswahl(): void {
-  if (ausgewaehlt.value.size === 0) return
-
-  lehrer.value = lehrer.value.map((eintrag) => {
-    if (!ausgewaehlt.value.has(eintrag.id)) return eintrag
-    return {
-      ...eintrag,
-      notenpasswort: generiereNotenpasswort(),
-    }
-  })
-}
-
-function druckePasswortStreifen(): void {
-  errorMessage.value = ''
-
-  const daten = sichtbareLehrer.value.filter((l) => ausgewaehlt.value.has(l.id))
-  if (daten.length === 0) {
-    errorMessage.value = 'Bitte mindestens eine Lehrkraft auswählen, um die Passwortstreifen zu drucken.'
-    return
-  }
-
-  const streifen = daten
-    .map((l) => {
-      const name = `${l.nachname}, ${l.vorname}`
-      return {
-        kuerzel: l.kuerzel,
-        name,
-        passwort: l.notenpasswort.trim() !== '' ? l.notenpasswort : '-',
-      }
-    })
-
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  })
-
-  const pageWidth = doc.internal.pageSize.getWidth()
-  const pageHeight = doc.internal.pageSize.getHeight()
-  const marginX = 12
-  const marginTop = 12
-  const marginBottom = 12
-  const stripHeight = 18
-  const right = pageWidth - marginX
-  const contentWidth = pageWidth - (2 * marginX)
-
-  let y = marginTop
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(14)
-  doc.text('Notenpasswoerter je Lehrkraft', marginX, y)
-  y += 8
-
-  for (const eintrag of streifen) {
-    if (y + stripHeight > pageHeight - marginBottom) {
-      doc.addPage()
-      y = marginTop
-    }
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.text('Kuerzel:', marginX, y + 3.5)
-    doc.text('Name:', marginX + 34, y + 3.5)
-
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.text(doc.splitTextToSize(eintrag.kuerzel, 24), marginX + 13, y + 3.5)
-    doc.text(doc.splitTextToSize(eintrag.name, contentWidth - 48), marginX + 44, y + 3.5)
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.text('Notenpasswort:', marginX, y + 10.5)
-
-    doc.setFont('courier', 'bold')
-    doc.setFontSize(12)
-    doc.text(eintrag.passwort, marginX + 24, y + 10.7)
-
-    doc.setDrawColor(107, 114, 128)
-    doc.setLineWidth(0.2)
-    doc.setLineDashPattern([1.2, 1.2], 0)
-    doc.line(marginX, y + stripHeight - 1.1, right, y + stripHeight - 1.1)
-    doc.setLineDashPattern([], 0)
-
-    y += stripHeight
-  }
-
-  const jetzt = new Date()
-  const stempel = `${jetzt.getFullYear()}-${String(jetzt.getMonth() + 1).padStart(2, '0')}-${String(jetzt.getDate()).padStart(2, '0')}`
-  doc.save(`notenpasswoerter-${stempel}.pdf`)
-}
-
-// --- Schlüssel-Modal ---
-const schluesselModalOffen = ref<boolean>(false)
-const schluesselGeneriert = ref<boolean>(false)
-const schluesselGenerierenLaeuft = ref<boolean>(false)
-const schluesselFehler = ref<string>('')
-const oeffentlicherSchluesselPem = ref<string>('')
-const privaterSchluesselPem = ref<string>('')
-const privaterSchluessel = ref<CryptoKey | null>(null)
-const oeffentlicherSchluessel = ref<CryptoKey | null>(null)
-
-function generiereSchluessel(): void {
-  schluesselFehler.value = ''
-  schluesselModalOffen.value = true
-}
-
-function schliesseSchluesselModal(): void {
-  schluesselModalOffen.value = false
-}
-
-async function fuehreSchluesselGenerierungDurch(): Promise<void> {
-  schluesselFehler.value = ''
-  schluesselGenerierenLaeuft.value = true
-  try {
-    const keyPair = await window.crypto.subtle.generateKey(
-      {
-        name: 'RSA-OAEP',
-        modulusLength: 4096,
-        publicExponent: new Uint8Array([1, 0, 1]),
-        hash: 'SHA-256',
-      },
-      true,
-      ['encrypt', 'decrypt'],
-    )
-    oeffentlicherSchluessel.value = keyPair.publicKey
-    privaterSchluessel.value = keyPair.privateKey
-    const spki = await window.crypto.subtle.exportKey('spki', keyPair.publicKey)
-    const pubB64 = window.btoa(String.fromCharCode(...new Uint8Array(spki)))
-    const pubLines = pubB64.match(/.{1,64}/g)?.join('\n') ?? pubB64
-    oeffentlicherSchluesselPem.value = `-----BEGIN PUBLIC KEY-----\n${pubLines}\n-----END PUBLIC KEY-----`
-
-    const pkcs8 = await window.crypto.subtle.exportKey('pkcs8', keyPair.privateKey)
-    const privB64 = window.btoa(String.fromCharCode(...new Uint8Array(pkcs8)))
-    const privLines = privB64.match(/.{1,64}/g)?.join('\n') ?? privB64
-    privaterSchluesselPem.value = `-----BEGIN PRIVATE KEY-----\n${privLines}\n-----END PRIVATE KEY-----`
-
-    schluesselGeneriert.value = true
-  } catch (error) {
-    schluesselFehler.value = error instanceof Error ? error.message : 'Schlüsselerzeugung fehlgeschlagen.'
-  } finally {
-    schluesselGenerierenLaeuft.value = false
-  }
-}
-
-function erzeugeeDateien(): void {
-  void erzeugeDateienFuerAuswahl()
-}
-
-// --- AES-256-GCM Crypto-Hilfsfunktionen (ADR-0005) ---
-
-async function leitenSchluesselAb(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
-  const enc = new TextEncoder()
-  const keyMaterial = await window.crypto.subtle.importKey(
-    'raw',
-    enc.encode(password),
-    'PBKDF2',
-    false,
-    ['deriveKey'],
-  )
-  return window.crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt, iterations: 310_000, hash: 'SHA-256' },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt'],
-  )
-}
-
-async function aesVerschluesseln(plaintext: string, password: string): Promise<string> {
-  const enc = new TextEncoder()
-  const saltBuf = window.crypto.getRandomValues(new Uint8Array(16)).buffer.slice(0) as ArrayBuffer
-  const ivBuf = window.crypto.getRandomValues(new Uint8Array(12)).buffer.slice(0) as ArrayBuffer
-  const key = await leitenSchluesselAb(password, saltBuf)
-  const cipherBuf = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBuf }, key, enc.encode(plaintext))
-  const toB64 = (buf: ArrayBuffer): string => window.btoa(String.fromCharCode(...new Uint8Array(buf)))
-  return JSON.stringify({ version: 1, salt: toB64(saltBuf), iv: toB64(ivBuf), ciphertext: toB64(cipherBuf) })
-}
-
-async function aesEntschluesseln(encryptedJson: string, password: string): Promise<string> {
-  const parsed = JSON.parse(encryptedJson) as { version: number; salt: string; iv: string; ciphertext: string }
-  const fromB64 = (s: string): ArrayBuffer =>
-    Uint8Array.from(window.atob(s), (c) => c.charCodeAt(0)).buffer.slice(0) as ArrayBuffer
-  const saltBuf = fromB64(parsed.salt)
-  const ivBuf = fromB64(parsed.iv)
-  const cipherBuf = fromB64(parsed.ciphertext)
-  const key = await leitenSchluesselAb(password, saltBuf)
-  const plainBuf = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBuf }, key, cipherBuf)
-  return new TextDecoder().decode(plainBuf)
-}
-
-function arrayBufferNachBase64(buffer: ArrayBuffer): string {
-  return window.btoa(String.fromCharCode(...new Uint8Array(buffer)))
-}
-
-function base64NachArrayBuffer(value: string): ArrayBuffer {
-  return Uint8Array.from(window.atob(value), (c) => c.charCodeAt(0)).buffer.slice(0) as ArrayBuffer
-}
-
-async function aesVerschluesselnBytes(plaintext: ArrayBuffer, password: string, originalDateiname: string): Promise<string> {
-  const saltBuf = window.crypto.getRandomValues(new Uint8Array(16)).buffer.slice(0) as ArrayBuffer
-  const ivBuf = window.crypto.getRandomValues(new Uint8Array(12)).buffer.slice(0) as ArrayBuffer
-  const key = await leitenSchluesselAb(password, saltBuf)
-  const cipherBuf = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBuf }, key, plaintext)
-  return JSON.stringify({
-    format: 'gradehub-encrypted-zip',
-    version: 1,
-    originalFileName: originalDateiname,
-    salt: arrayBufferNachBase64(saltBuf),
-    iv: arrayBufferNachBase64(ivBuf),
-    ciphertext: arrayBufferNachBase64(cipherBuf),
-  })
-}
-
-function arrayBufferAusUint8Array(value: Uint8Array): ArrayBuffer {
-  return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
-}
-
-async function ladeENMJsonFuerLehrer(lehrerId: number): Promise<string> {
-  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
-  const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/enm/v2/lehrer/${lehrerId}`
-  let response: Response
-
-  try {
-    response = await fetch(endpoint, {
-      method: 'GET',
-      headers: {
-        Authorization: encodeBasicAuth(authStore.username, authStore.password),
-        Accept: 'application/json',
-      },
-    })
-  } catch {
-    throw new Error(`Netzwerkfehler beim Zugriff auf ${endpoint}. Bitte URL, Protokoll und CORS pruefen.`)
-  }
-
-  if (!response.ok) {
-    throw new Error(`ENM für Lehrkraft ${lehrerId} konnte nicht geladen werden (${response.status}).`)
-  }
-
-  const text = await response.text()
-  try {
-    const parsed = JSON.parse(text) as unknown
-    return JSON.stringify(parsed, null, 2)
-  } catch {
-    throw new Error(`Antwort fuer Lehrkraft ${lehrerId} ist kein gueltiges JSON.`)
-  }
-}
-
-type DirectoryPickerResult = {
-  directoryHandle: FileSystemDirectoryHandle | null
-  cancelled: boolean
-}
-
-async function waehleAusgabeOrdner(): Promise<DirectoryPickerResult> {
-  const pickerWindow = window as Window & {
-    showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle>
-  }
-
-  if (typeof pickerWindow.showDirectoryPicker !== 'function') {
-    return { directoryHandle: null, cancelled: false }
-  }
-
-  try {
-    const directoryHandle = await pickerWindow.showDirectoryPicker()
-    return { directoryHandle, cancelled: false }
-  } catch {
-    return { directoryHandle: null, cancelled: true }
-  }
-}
-
-async function speichereDatei(dateiname: string, inhalt: string, directoryHandle: FileSystemDirectoryHandle | null): Promise<void> {
-  if (directoryHandle) {
-    const fileHandle = await directoryHandle.getFileHandle(dateiname, { create: true })
-    const writable = await fileHandle.createWritable()
-    await writable.write(inhalt)
-    await writable.close()
-    return
-  }
-
-  const blob = new Blob([inhalt], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = dateiname
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-async function erzeugeDateienFuerAuswahl(): Promise<void> {
-  errorMessage.value = ''
-
-  if (ausgewaehlt.value.size === 0) {
-    errorMessage.value = 'Bitte mindestens eine Lehrkraft auswählen.'
-    return
-  }
-
-  if (!oeffentlicherSchluesselPem.value) {
-    errorMessage.value = 'Bitte zuerst ein Schlüsselpaar erzeugen (öffentlicher Schlüssel fehlt).'
-    return
-  }
-
-  const ausgewaehlteLehrer = lehrer.value.filter((eintrag) => ausgewaehlt.value.has(eintrag.id))
-  const ohneNotenpasswort = ausgewaehlteLehrer.filter((eintrag) => eintrag.notenpasswort.trim() === '')
-  if (ohneNotenpasswort.length > 0) {
-    errorMessage.value = `Für folgende Lehrkräfte fehlt ein Notenpasswort: ${ohneNotenpasswort.map((l) => l.kuerzel).join(', ')}`
-    return
-  }
-
-  isLoading.value = true
-  try {
-    const { directoryHandle, cancelled } = await waehleAusgabeOrdner()
-    if (cancelled) {
-      return
-    }
-
-    for (const eintrag of ausgewaehlteLehrer) {
-      const enmJson = await ladeENMJsonFuerLehrer(eintrag.id)
-      const zipBytes = zipSync({
-        'enm.json': strToU8(enmJson),
-        'public_key.pem': strToU8(oeffentlicherSchluesselPem.value),
-      })
-
-      const zipFileName = `${eintrag.kuerzel || `lehrer-${eintrag.id}`}-enm.zip`
-      const verschluesselt = await aesVerschluesselnBytes(
-        arrayBufferAusUint8Array(zipBytes),
-        eintrag.notenpasswort,
-        zipFileName,
-      )
-      await speichereDatei(`${zipFileName}.enc.json`, verschluesselt, directoryHandle)
-    }
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'Dateien konnten nicht erzeugt werden.'
-  } finally {
-    isLoading.value = false
-  }
-}
-
-// --- Speichern-Modal ---
-const speichernModalOffen = ref<boolean>(false)
-const speichernKennwort = ref<string>('')
-const speichernKennwortBestaetigung = ref<string>('')
-const speichernFehler = ref<string>('')
-const speichernLaeuft = ref<boolean>(false)
-
-function speichern(): void {
-  speichernKennwort.value = ''
-  speichernKennwortBestaetigung.value = ''
-  speichernFehler.value = ''
-  speichernModalOffen.value = true
-}
-
-function schliesseSpeichernModal(): void {
-  speichernModalOffen.value = false
-}
-
-async function fuehreSpeichernDurch(): Promise<void> {
-  if (speichernKennwort.value.length < 8) {
-    speichernFehler.value = 'Das Kennwort muss mindestens 8 Zeichen lang sein.'
-    return
-  }
-  if (speichernKennwort.value !== speichernKennwortBestaetigung.value) {
-    speichernFehler.value = 'Die Kennwörter stimmen nicht überein.'
-    return
-  }
-  speichernFehler.value = ''
-  speichernLaeuft.value = true
-  try {
-    const daten = {
-      schluessel: {
-        oeffentlich: oeffentlicherSchluesselPem.value || null,
-        privat: privaterSchluesselPem.value || null,
-      },
-      lehrer: lehrer.value.map((l) => ({ id: l.id, kuerzel: l.kuerzel, notenpasswort: l.notenpasswort })),
-      smtp: smtpHost.value.trim() !== '' ? {
-        host: smtpHost.value.trim(),
-        port: parseInt(smtpPort.value, 10) || 587,
-        user: smtpUser.value,
-        password: smtpPassword.value,
-        from: smtpFrom.value,
-        tls: smtpTls.value,
-      } : null,
-    }
-    const encrypted = await aesVerschluesseln(JSON.stringify(daten, null, 2), speichernKennwort.value)
-    const blob = new Blob([encrypted], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'gradehub-config.ghb'
-    a.click()
-    URL.revokeObjectURL(url)
-    speichernModalOffen.value = false
-  } catch (error) {
-    speichernFehler.value = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.'
-  } finally {
-    speichernLaeuft.value = false
-  }
-}
-
-// --- Laden-Modal ---
-const ladenModalOffen = ref<boolean>(false)
-const ladenKennwort = ref<string>('')
-const ladenFehler = ref<string>('')
-const ladenLaeuft = ref<boolean>(false)
-const ladenDateiName = ref<string>('')
-const ladenDateiText = ref<string>('')
-
-function laden(): void {
-  ladenKennwort.value = ''
-  ladenFehler.value = ''
-  ladenDateiName.value = ''
-  ladenDateiText.value = ''
-  ladenModalOffen.value = true
-}
-
-function schliesseLabenModal(): void {
-  ladenModalOffen.value = false
-}
-
-function onLadenDateiGewaehlt(event: Event): void {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-  ladenDateiName.value = file.name
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    if (typeof e.target?.result === 'string') {
-      ladenDateiText.value = e.target.result
-    }
-  }
-  reader.readAsText(file)
-}
-
-async function fuehreLabenDurch(): Promise<void> {
-  if (!ladenDateiText.value) {
-    ladenFehler.value = 'Bitte eine Datei auswählen.'
-    return
-  }
-  if (!ladenKennwort.value) {
-    ladenFehler.value = 'Bitte das Kennwort eingeben.'
-    return
-  }
-  ladenFehler.value = ''
-  ladenLaeuft.value = true
-  try {
-    const plaintext = await aesEntschluesseln(ladenDateiText.value, ladenKennwort.value)
-    const daten = JSON.parse(plaintext) as {
-      schluessel: { oeffentlich: string | null; privat: string | null }
-      lehrer: { id: number; kuerzel: string; notenpasswort: string }[]
-      smtp?: { host: string; port: number; user: string; password: string; from: string; tls: boolean } | null
-    }
-    oeffentlicherSchluesselPem.value = daten.schluessel.oeffentlich ?? ''
-    privaterSchluesselPem.value = daten.schluessel.privat ?? ''
-    schluesselGeneriert.value = !!(daten.schluessel.oeffentlich && daten.schluessel.privat)
-    const passwortMap = new Map(daten.lehrer.map((l) => [l.id, l.notenpasswort]))
-    lehrer.value = lehrer.value.map((l) => ({
-      ...l,
-      notenpasswort: passwortMap.get(l.id) ?? l.notenpasswort,
-    }))
-    if (daten.smtp) {
-      smtpHost.value = daten.smtp.host
-      smtpPort.value = String(daten.smtp.port)
-      smtpUser.value = daten.smtp.user
-      smtpPassword.value = daten.smtp.password
-      smtpFrom.value = daten.smtp.from
-      smtpTls.value = daten.smtp.tls
-    }
-    ladenModalOffen.value = false
-  } catch {
-    ladenFehler.value = 'Entschlüsselung fehlgeschlagen. Falsches Kennwort oder beschädigte Datei.'
-  } finally {
-    ladenLaeuft.value = false
-  }
-}
-
-// --- Versand ---
-type VersandErgebnis = { kuerzel: string; email: string; erfolg: boolean; meldung: string }
-
-const versandModalOffen = ref<boolean>(false)
-const versandErgebnisse = ref<VersandErgebnis[]>([])
-const versandLaeuft = ref<boolean>(false)
-const versandFortschritt = ref<number>(0)
-const versandGesamt = ref<number>(0)
-
-function schliesseVersandModal(): void {
-  if (!versandLaeuft.value) versandModalOffen.value = false
-}
-
-async function versendeDateienFuerAuswahl(): Promise<void> {
-  errorMessage.value = ''
-
-  if (ausgewaehlt.value.size === 0) {
-    errorMessage.value = 'Bitte mindestens eine Lehrkraft auswählen.'
-    return
-  }
-  if (!smtpHost.value.trim()) {
-    errorMessage.value = 'Bitte zuerst einen E-Mail-Server konfigurieren.'
-    return
-  }
-  if (!oeffentlicherSchluesselPem.value) {
-    errorMessage.value = 'Bitte zuerst ein Schlüsselpaar erzeugen (öffentlicher Schlüssel fehlt).'
-    return
-  }
-
-  const ausgewaehlteLehrer = lehrer.value.filter((eintrag) => ausgewaehlt.value.has(eintrag.id))
-  const ohneNotenpasswort = ausgewaehlteLehrer.filter((eintrag) => eintrag.notenpasswort.trim() === '')
-  if (ohneNotenpasswort.length > 0) {
-    errorMessage.value = `Für folgende Lehrkräfte fehlt ein Notenpasswort: ${ohneNotenpasswort.map((l) => l.kuerzel).join(', ')}`
-    return
-  }
-  const ohneEmail = ausgewaehlteLehrer.filter((eintrag) => eintrag.emailDienstlich.trim() === '')
-  if (ohneEmail.length > 0) {
-    errorMessage.value = `Für folgende Lehrkräfte fehlt eine E-Mail-Adresse: ${ohneEmail.map((l) => l.kuerzel).join(', ')}`
-    return
-  }
-
-  versandErgebnisse.value = []
-  versandFortschritt.value = 0
-  versandGesamt.value = ausgewaehlteLehrer.length
-  versandLaeuft.value = true
-  versandModalOffen.value = true
-  isLoading.value = true
-
-  const smtpKonfig = {
-    host: smtpHost.value.trim(),
-    port: parseInt(smtpPort.value, 10) || 587,
-    user: smtpUser.value,
-    password: smtpPassword.value,
-    from: smtpFrom.value,
-    tls: smtpTls.value,
-  }
-
-  for (const eintrag of ausgewaehlteLehrer) {
-    try {
-      const enmJson = await ladeENMJsonFuerLehrer(eintrag.id)
-      const zipBytes = zipSync({
-        'enm.json': strToU8(enmJson),
-        'public_key.pem': strToU8(oeffentlicherSchluesselPem.value),
-      })
-      const zipFileName = `${eintrag.kuerzel || `lehrer-${eintrag.id}`}-enm.zip`
-      const verschluesselt = await aesVerschluesselnBytes(
-        arrayBufferAusUint8Array(zipBytes),
-        eintrag.notenpasswort,
-        zipFileName,
-      )
-      const dateiname = `${zipFileName}.enc.json`
-
-      const response = await fetch('/api/mail/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: eintrag.emailDienstlich, filename: dateiname, content: verschluesselt, smtp: smtpKonfig }),
-      })
-
-      const text = await response.text()
-      versandErgebnisse.value.push({
-        kuerzel: eintrag.kuerzel,
-        email: eintrag.emailDienstlich,
-        erfolg: response.ok,
-        meldung: response.ok ? 'Gesendet.' : (text || `Fehler ${response.status}`),
-      })
-    } catch (error) {
-      versandErgebnisse.value.push({
-        kuerzel: eintrag.kuerzel,
-        email: eintrag.emailDienstlich,
-        erfolg: false,
-        meldung: error instanceof Error ? error.message : 'Unbekannter Fehler.',
-      })
-    }
-    versandFortschritt.value += 1
-  }
-
-  versandLaeuft.value = false
-  isLoading.value = false
-}
-
-// --- SMTP-Modal ---
-const smtpModalOffen = ref<boolean>(false)
-const smtpFehler = ref<string>('')
-const smtpHost = ref<string>('')
-const smtpPort = ref<string>('587')
-const smtpUser = ref<string>('')
-const smtpPassword = ref<string>('')
-const smtpFrom = ref<string>('')
-const smtpTls = ref<boolean>(true)
-
-function oeffneSmtpModal(): void {
-  smtpFehler.value = ''
-  smtpModalOffen.value = true
-}
-
-function schliesseSmtpModal(): void {
-  smtpModalOffen.value = false
-}
-
-function speichereSmtpKonfiguration(): void {
-  if (!smtpHost.value.trim()) {
-    smtpFehler.value = 'Bitte einen SMTP-Server angeben.'
-    return
-  }
-  smtpFehler.value = ''
-  smtpModalOffen.value = false
-}
-
-const smtpTestLaeuft = ref<boolean>(false)
-const smtpTestErfolg = ref<boolean | null>(null)
-const smtpTestMeldung = ref<string>('')
-
-async function testeSmtpVerbindung(): Promise<void> {
-  if (!smtpHost.value.trim()) {
-    smtpFehler.value = 'Bitte einen SMTP-Server angeben.'
-    return
-  }
-  smtpFehler.value = ''
-  smtpTestLaeuft.value = true
-  smtpTestErfolg.value = null
-  smtpTestMeldung.value = ''
-
-  try {
-    const response = await fetch('/api/mail/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        host: smtpHost.value.trim(),
-        port: parseInt(smtpPort.value, 10) || 587,
-        user: smtpUser.value,
-        password: smtpPassword.value,
-        from: smtpFrom.value,
-        tls: smtpTls.value,
-      }),
-    })
-
-    if (response.ok) {
-      smtpTestErfolg.value = true
-      smtpTestMeldung.value = 'Verbindung erfolgreich.'
-    } else {
-      const text = await response.text()
-      smtpTestErfolg.value = false
-      smtpTestMeldung.value = text || `Verbindung fehlgeschlagen (${response.status}).`
-    }
-  } catch {
-    smtpTestErfolg.value = false
-    smtpTestMeldung.value = 'Server nicht erreichbar. Ist das Backend gestartet?'
-  } finally {
-    smtpTestLaeuft.value = false
-  }
-}
-
-// --- Import-Modal ---
-
-let importIdCounter = 0
-
-type ImportEintrag = {
-  id: number
-  file: File
-  dateiname: string
-  kuerzelErmittelt: string
-  status: 'ausstehend' | 'ok' | 'fehler' | 'passwortFehlt' | 'gesendet' | 'sendefehler'
-  fehlerText: string
-  enmJson: string
-  manuellKennwort: string
-  manuellKuerzel: string
-  istVerschluesselt: boolean
-  verarbeiteLaeuft: boolean
-  sendeLaeuft: boolean
-  sendeFehler: string
-}
-
-type EncryptedZipPayload = {
-  format: 'gradehub-encrypted-zip'
-  version: number
-  originalFileName: string
-  salt: string
-  iv: string
-  ciphertext: string
-}
-
-const importModalOffen = ref<boolean>(false)
-const importEintraege = ref<ImportEintrag[]>([])
-const importLaeuft = ref<boolean>(false)
-const importAllesendenLaeuft = ref<boolean>(false)
-
-const importErfolgreicheAnzahl = computed<number>(() =>
-  importEintraege.value.filter((e) => e.status === 'ok').length,
-)
-
-function oeffneImportModal(): void {
-  importModalOffen.value = true
-}
-
-function schliesseImportModal(): void {
-  importModalOffen.value = false
-}
-
-function resetImport(): void {
-  importEintraege.value = []
-}
-
-function importStatusText(eintrag: ImportEintrag): string {
-  if (eintrag.status === 'ok') return 'Bereit'
-  if (eintrag.status === 'passwortFehlt') return 'Kennwort fehlt'
-  if (eintrag.status === 'fehler') return 'Fehler'
-  if (eintrag.status === 'gesendet') return 'Gesendet'
-  if (eintrag.status === 'sendefehler') return 'Sendefehler'
-  if (eintrag.status === 'ausstehend') return 'Wird verarbeitet…'
-  return ''
-}
-
-function importEintragKlasse(eintrag: ImportEintrag): Record<string, boolean> {
-  return {
-    'import-ok': eintrag.status === 'ok' || eintrag.status === 'gesendet',
-    'import-gesendet': eintrag.status === 'gesendet',
-    'import-fehler': eintrag.status === 'fehler' || eintrag.status === 'sendefehler',
-    'import-warnung': eintrag.status === 'passwortFehlt',
-  }
-}
-
-function istEncryptedZipPayload(value: unknown): value is EncryptedZipPayload {
-  if (typeof value !== 'object' || value === null) return false
-  const rec = value as Record<string, unknown>
-  return rec.format === 'gradehub-encrypted-zip'
-    && typeof rec.version === 'number'
-    && typeof rec.originalFileName === 'string'
-    && typeof rec.salt === 'string'
-    && typeof rec.iv === 'string'
-    && typeof rec.ciphertext === 'string'
-}
-
-function extrahiereKuerzelAusDateiname(name: string): string {
-  const match = /^([A-Za-z0-9]+)-enm[.\-_]/i.exec(name)
-  return match?.[1]?.toUpperCase() ?? ''
-}
-
-function bauePasswortMap(): Map<string, string> {
-  return new Map(
-    lehrer.value
-      .filter((l) => l.notenpasswort.trim() !== '')
-      .map((l) => [l.kuerzel.toUpperCase(), l.notenpasswort]),
-  )
-}
-
-const IMPORT_GZIP_MAGIC_1 = 0x1f
-const IMPORT_GZIP_MAGIC_2 = 0x8b
-
-async function verarbeiteImportDateiInhalt(
-  file: File,
-  eintrag: ImportEintrag,
-  passwortMapNachKuerzel: Map<string, string>,
-): Promise<void> {
-  const buf = await file.arrayBuffer()
-  const bytes = new Uint8Array(buf)
-
-  if (bytes.length > 2 && bytes[0] === IMPORT_GZIP_MAGIC_1 && bytes[1] === IMPORT_GZIP_MAGIC_2) {
-    eintrag.enmJson = strFromU8(decompressSync(bytes))
-    eintrag.kuerzelErmittelt = extrahiereKuerzelAusDateiname(file.name)
-    eintrag.istVerschluesselt = false
-    return
-  }
-
-  const text = new TextDecoder().decode(bytes)
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    throw new Error('Datei ist kein gültiges JSON und keine gzip-Datei.')
-  }
-
-  if (istEncryptedZipPayload(parsed)) {
-    eintrag.istVerschluesselt = true
-    const kuerzelAusOriginal = extrahiereKuerzelAusDateiname(parsed.originalFileName)
-    if (!eintrag.kuerzelErmittelt) {
-      eintrag.kuerzelErmittelt = kuerzelAusOriginal
-    }
-
-    const kuerzelSuche = (eintrag.manuellKuerzel.trim() || eintrag.kuerzelErmittelt).toUpperCase()
-    const passwort = eintrag.manuellKennwort.trim() || passwortMapNachKuerzel.get(kuerzelSuche) || ''
-
-    if (!passwort) {
-      eintrag.status = 'passwortFehlt'
-      eintrag.fehlerText = `Kein Notenpasswort für Kürzel "${eintrag.kuerzelErmittelt || '?'}" gefunden. Bitte Kürzel zuordnen oder Kennwort eingeben.`
-      return
-    }
-
-    const salt = base64NachArrayBuffer(parsed.salt)
-    const iv = base64NachArrayBuffer(parsed.iv)
-    const ciphertext = base64NachArrayBuffer(parsed.ciphertext)
-    const key = await leitenSchluesselAb(passwort, salt)
-
-    let plainZip: ArrayBuffer
-    try {
-      plainZip = await window.crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
-    } catch {
-      throw new Error('Entschlüsselung fehlgeschlagen. Falsches Kennwort oder beschädigte Datei.')
-    }
-
-    const zipEntries = unzipSync(new Uint8Array(plainZip))
-    const enmBytes = zipEntries['enm.json']
-    if (!enmBytes) throw new Error('Die entschlüsselte ZIP enthält keine enm.json.')
-    eintrag.enmJson = strFromU8(enmBytes)
-  } else {
-    eintrag.enmJson = text
-    eintrag.kuerzelErmittelt = extrahiereKuerzelAusDateiname(file.name)
-    eintrag.istVerschluesselt = false
-  }
-}
-
-async function verarbeiteImportDatei(file: File, passwortMapNachKuerzel: Map<string, string>): Promise<void> {
-  const eintrag: ImportEintrag = {
-    id: ++importIdCounter,
-    file,
-    dateiname: file.name,
-    kuerzelErmittelt: '',
-    status: 'ausstehend',
-    fehlerText: '',
-    enmJson: '',
-    manuellKennwort: '',
-    manuellKuerzel: '',
-    istVerschluesselt: false,
-    verarbeiteLaeuft: false,
-    sendeLaeuft: false,
-    sendeFehler: '',
-  }
-  importEintraege.value.push(eintrag)
-
-  try {
-    await verarbeiteImportDateiInhalt(file, eintrag, passwortMapNachKuerzel)
-    if (eintrag.status === 'ausstehend') {
-      eintrag.status = 'ok'
-    }
-  } catch (error) {
-    eintrag.status = 'fehler'
-    eintrag.fehlerText = error instanceof Error ? error.message : 'Unbekannter Fehler.'
-  }
-}
-
-async function starteImportVonDateien(files: FileList | File[]): Promise<void> {
-  importLaeuft.value = true
-  const passwortMap = bauePasswortMap()
-  try {
-    for (const file of files) {
-      const lower = file.name.toLowerCase()
-      if (!lower.endsWith('.json') && !lower.endsWith('.gz') && !lower.endsWith('.enc.json')) continue
-      await verarbeiteImportDatei(file, passwortMap)
-    }
-  } finally {
-    importLaeuft.value = false
-  }
-}
-
-async function waehleImportOrdner(): Promise<void> {
-  const pickerWindow = window as Window & {
-    showDirectoryPicker?: (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle & {
-      entries: () => AsyncIterable<[string, { kind: string; getFile: () => Promise<File> }]>
-    }>
-  }
-
-  if (typeof pickerWindow.showDirectoryPicker !== 'function') {
-    errorMessage.value = 'Ordner-Auswahl wird von diesem Browser nicht unterstützt. Bitte Dateien einzeln auswählen.'
-    return
-  }
-
-  let handle: Awaited<ReturnType<NonNullable<typeof pickerWindow.showDirectoryPicker>>>
-  try {
-    handle = await pickerWindow.showDirectoryPicker({ mode: 'read' })
-  } catch {
-    return
-  }
-
-  const files: File[] = []
-  for await (const [, entry] of handle.entries()) {
-    if (entry.kind === 'file') {
-      files.push(await entry.getFile())
-    }
-  }
-
-  await starteImportVonDateien(files)
-}
-
-async function onImportDateienGewaehlt(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  if (!input.files || input.files.length === 0) return
-  await starteImportVonDateien(input.files)
-  input.value = ''
-}
-
-async function verarbeiteEintragNochmal(eintrag: ImportEintrag): Promise<void> {
-  eintrag.verarbeiteLaeuft = true
-  eintrag.fehlerText = ''
-  eintrag.status = 'ausstehend'
-  eintrag.enmJson = ''
-
-  const passwortMap = bauePasswortMap()
-  if (eintrag.manuellKuerzel.trim() && !eintrag.manuellKennwort.trim()) {
-    const pw = passwortMap.get(eintrag.manuellKuerzel.toUpperCase())
-    if (pw) eintrag.manuellKennwort = pw
-  }
-
-  try {
-    await verarbeiteImportDateiInhalt(eintrag.file, eintrag, passwortMap)
-    if (eintrag.status === 'ausstehend') {
-      eintrag.status = 'ok'
-    }
-  } catch (error) {
-    eintrag.status = 'fehler'
-    eintrag.fehlerText = error instanceof Error ? error.message : 'Unbekannter Fehler.'
-  } finally {
-    eintrag.verarbeiteLaeuft = false
-  }
-}
-
-async function sendeENMAnSVWSServer(enmJson: string): Promise<void> {
-  const cleanedBaseUrl = authStore.baseUrl.replace(/\/$/, '')
-  const endpoint = `${cleanedBaseUrl}/db/${authStore.schema}/enm/v2/import`
-  let response: Response
-
-  try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: encodeBasicAuth(authStore.username, authStore.password),
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: enmJson,
-    })
-  } catch {
-    throw new Error('Netzwerkfehler beim Zugriff auf den SVWS-Server.')
-  }
-
-  if (!response.ok) {
-    throw new Error(`Import fehlgeschlagen (${response.status}).`)
-  }
-}
-
-async function sendeEintragAnServer(eintrag: ImportEintrag): Promise<void> {
-  eintrag.sendeLaeuft = true
-  eintrag.sendeFehler = ''
-  try {
-    await sendeENMAnSVWSServer(eintrag.enmJson)
-    eintrag.status = 'gesendet'
-  } catch (error) {
-    eintrag.status = 'sendefehler'
-    eintrag.sendeFehler = error instanceof Error ? error.message : 'Unbekannter Fehler.'
-  } finally {
-    eintrag.sendeLaeuft = false
-  }
-}
-
-async function sendeAlleAnServer(): Promise<void> {
-  importAllesendenLaeuft.value = true
-  try {
-    for (const eintrag of importEintraege.value) {
-      if (eintrag.status !== 'ok') continue
-      await sendeEintragAnServer(eintrag)
-    }
-  } finally {
-    importAllesendenLaeuft.value = false
-  }
-}
-
-function spaltenStil(key: SpaltenKey): { width: string; minWidth: string } {
-  const breite = spaltenBreiten.value[key]
-  if (key === 'passwort') {
-    return {
-      width: 'auto',
-      minWidth: `${breite}px`,
-    }
-  }
-
-  return {
-    width: `${breite}px`,
-    minWidth: `${breite}px`,
-  }
-}
-
-function onResizeMove(event: MouseEvent): void {
-  if (!resizing) return
-  const delta = event.clientX - resizing.startX
-  const nextWidth = Math.max(minBreiten[resizing.key], resizing.startWidth + delta)
-  spaltenBreiten.value[resizing.key] = nextWidth
-}
-
-function onResizeEnd(): void {
-  if (!resizing) return
-  resizing = null
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', onResizeEnd)
-  document.body.style.cursor = ''
-}
-
-function starteResize(key: SpaltenKey, event: MouseEvent): void {
-  event.preventDefault()
-  event.stopPropagation()
-
-  resizing = {
-    key,
-    startX: event.clientX,
-    startWidth: spaltenBreiten.value[key],
-  }
-
-  document.body.style.cursor = 'col-resize'
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', onResizeEnd)
-}
 
 onUnmounted(() => {
   onResizeEnd()
@@ -1268,19 +209,45 @@ onUnmounted(() => {
     <div class="page-header">
       <h1>Notendatei Adminbereich</h1>
       <div class="theme-row">
-        <label class="theme-control" for="admin-theme-select">Theme</label>
-        <select id="admin-theme-select" :value="themePreference" @change="onThemeChange">
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
+        <label
+          class="theme-control"
+          for="admin-theme-select"
+        >Theme</label>
+        <select
+          id="admin-theme-select"
+          :value="themePreference"
+          @change="onThemeChange"
+        >
+          <option value="system">
+            System
+          </option>
+          <option value="light">
+            Light
+          </option>
+          <option value="dark">
+            Dark
+          </option>
         </select>
       </div>
     </div>
 
-    <p v-if="isLoading" class="status">Lehrkräfte werden geladen…</p>
-    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+    <p
+      v-if="isLoading"
+      class="status"
+    >
+      Lehrkräfte werden geladen…
+    </p>
+    <p
+      v-if="errorMessage"
+      class="error"
+    >
+      {{ errorMessage }}
+    </p>
 
-    <section v-if="lehrer.length > 0" class="card">
+    <section
+      v-if="lehrer.length > 0"
+      class="card"
+    >
       <div class="table-header">
         <div class="table-header-left">
           <h2>Lehrkräfte ({{ sichtbareLehrer.length }})</h2>
@@ -1356,21 +323,30 @@ onUnmounted(() => {
         </div>
         <div class="table-header-actions">
           <label class="toggle-label">
-            <input v-model="nurAktive" type="checkbox" />
+            <input
+              v-model="nurAktive"
+              type="checkbox"
+            >
             Nur aktive anzeigen
           </label>
-          <button class="btn-logout" type="button" @click="logout">Abmelden</button>
+          <button
+            class="btn-logout"
+            type="button"
+            @click="logout"
+          >
+            Abmelden
+          </button>
         </div>
       </div>
 
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col class="col-check" />
-            <col :style="spaltenStil('kuerzel')" />
-            <col :style="spaltenStil('name')" />
-            <col :style="spaltenStil('email')" />
-            <col :style="spaltenStil('passwort')" />
+            <col class="col-check">
+            <col :style="spaltenStil('kuerzel')">
+            <col :style="spaltenStil('name')">
+            <col :style="spaltenStil('email')">
+            <col :style="spaltenStil('passwort')">
           </colgroup>
           <thead>
             <tr>
@@ -1380,33 +356,51 @@ onUnmounted(() => {
                   :checked="alleAusgewaehlt"
                   aria-label="Alle auswählen"
                   @change="toggleAlle"
-                />
+                >
               </th>
               <th class="col-kuerzel">
                 Kürzel
-                <span class="resize-handle" @mousedown="starteResize('kuerzel', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('kuerzel', $event)"
+                />
               </th>
               <th class="col-name">
                 Name, Vorname
-                <span class="resize-handle" @mousedown="starteResize('name', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('name', $event)"
+                />
               </th>
               <th class="col-email">
                 E-Mail (dienstlich)
-                <span class="resize-handle" @mousedown="starteResize('email', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('email', $event)"
+                />
               </th>
               <th class="col-passwort">
                 Notenpasswort
-                <span class="resize-handle" @mousedown="starteResize('passwort', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('passwort', $event)"
+                />
               </th>
             </tr>
           </thead>
           <tfoot>
             <tr>
-              <td colspan="5" class="tfoot-cell">
+              <td
+                colspan="5"
+                class="tfoot-cell"
+              >
                 <span v-if="ausgewaehlt.size > 0">
                   {{ ausgewaehlt.size }} Lehrkraft{{ ausgewaehlt.size !== 1 ? 'kräfte' : '' }} ausgewählt
                 </span>
-                <span v-else class="tfoot-empty">Keine Auswahl</span>
+                <span
+                  v-else
+                  class="tfoot-empty"
+                >Keine Auswahl</span>
               </td>
             </tr>
           </tfoot>
@@ -1423,11 +417,17 @@ onUnmounted(() => {
                   :checked="ausgewaehlt.has(l.id)"
                   @click.stop
                   @change="toggleAuswahl(l.id)"
-                />
+                >
               </td>
-              <td class="col-kuerzel">{{ l.kuerzel }}</td>
-              <td class="col-name">{{ l.nachname }}, {{ l.vorname }}</td>
-              <td class="col-email">{{ l.emailDienstlich }}</td>
+              <td class="col-kuerzel">
+                {{ l.kuerzel }}
+              </td>
+              <td class="col-name">
+                {{ l.nachname }}, {{ l.vorname }}
+              </td>
+              <td class="col-email">
+                {{ l.emailDienstlich }}
+              </td>
               <td class="col-passwort">
                 <div class="col-passwort-inhalt">
                   <span class="passwort-text">{{ l.notenpasswort || '-' }}</span>
@@ -1450,18 +450,46 @@ onUnmounted(() => {
     </section>
 
     <!-- Schlüssel-Modal -->
-    <div v-if="schluesselModalOffen" class="modal-backdrop" @click.self="schliesseSchluesselModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="schluessel-modal-title">
+    <div
+      v-if="schluesselModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseSchluesselModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="schluessel-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="schluessel-modal-title">Schlüsselpaar generieren</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSchluesselModal">✕</button>
+          <h2 id="schluessel-modal-title">
+            Schlüsselpaar generieren
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseSchluesselModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Algorithmus: RSA-OAEP · SHA-256 · 4096 Bit</p>
+          <p class="modal-meta">
+            Algorithmus: RSA-OAEP · SHA-256 · 4096 Bit
+          </p>
 
-          <p v-if="schluesselFehler" class="error">{{ schluesselFehler }}</p>
+          <p
+            v-if="schluesselFehler"
+            class="error"
+          >
+            {{ schluesselFehler }}
+          </p>
 
-          <div v-if="!schluesselGeneriert" class="modal-action-row">
+          <div
+            v-if="!schluesselGeneriert"
+            class="modal-action-row"
+          >
             <button
               class="btn-generate"
               type="button"
@@ -1472,13 +500,22 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <div v-else class="modal-success">
+          <div
+            v-else
+            class="modal-success"
+          >
             <span class="modal-success-icon">✓</span>
             Schlüsselpaar wurde erfolgreich erzeugt.
           </div>
 
-          <div v-if="oeffentlicherSchluesselPem" class="modal-key-block">
-            <label for="schluessel-pem-output" class="modal-key-label">Öffentlicher Schlüssel</label>
+          <div
+            v-if="oeffentlicherSchluesselPem"
+            class="modal-key-block"
+          >
+            <label
+              for="schluessel-pem-output"
+              class="modal-key-label"
+            >Öffentlicher Schlüssel</label>
             <textarea
               id="schluessel-pem-output"
               class="modal-key-textarea"
@@ -1487,8 +524,14 @@ onUnmounted(() => {
             />
           </div>
 
-          <div v-if="privaterSchluesselPem" class="modal-key-block">
-            <label for="schluessel-priv-output" class="modal-key-label modal-key-label--privat">Privater Schlüssel <span class="modal-key-warn">(geheim halten!)</span></label>
+          <div
+            v-if="privaterSchluesselPem"
+            class="modal-key-block"
+          >
+            <label
+              for="schluessel-priv-output"
+              class="modal-key-label modal-key-label--privat"
+            >Privater Schlüssel <span class="modal-key-warn">(geheim halten!)</span></label>
             <textarea
               id="schluessel-priv-output"
               class="modal-key-textarea"
@@ -1498,22 +541,56 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseSchluesselModal">Schließen</button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseSchluesselModal"
+          >
+            Schließen
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Speichern-Modal -->
-    <div v-if="speichernModalOffen" class="modal-backdrop" @click.self="schliesseSpeichernModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="speichern-modal-title">
+    <div
+      v-if="speichernModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseSpeichernModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="speichern-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="speichern-modal-title">Konfiguration speichern</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSpeichernModal">✕</button>
+          <h2 id="speichern-modal-title">
+            Konfiguration speichern
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseSpeichernModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Die Daten werden mit AES-256-GCM verschlüsselt gespeichert.</p>
-          <p v-if="speichernFehler" class="error">{{ speichernFehler }}</p>
-          <label class="modal-form-label" for="speichern-pw">Kennwort</label>
+          <p class="modal-meta">
+            Die Daten werden mit AES-256-GCM verschlüsselt. Auf dem SVWS-Server gespeicherte Konfiguration kann von jedem Gerät geladen werden.
+          </p>
+          <p
+            v-if="speichernFehler"
+            class="error"
+          >
+            {{ speichernFehler }}
+          </p>
+          <label
+            class="modal-form-label"
+            for="speichern-pw"
+          >Kennwort</label>
           <input
             id="speichern-pw"
             v-model="speichernKennwort"
@@ -1521,8 +598,11 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             placeholder="Mindestens 8 Zeichen"
-          />
-          <label class="modal-form-label" for="speichern-pw2">Kennwort bestätigen</label>
+          >
+          <label
+            class="modal-form-label"
+            for="speichern-pw2"
+          >Kennwort bestätigen</label>
           <input
             id="speichern-pw2"
             v-model="speichernKennwortBestaetigung"
@@ -1530,35 +610,87 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             placeholder="Kennwort wiederholen"
-          />
+          >
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseSpeichernModal">Abbrechen</button>
           <button
-            class="btn-generate btn-generate--aktiv"
+            class="btn-generate"
+            type="button"
+            @click="schliesseSpeichernModal"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="btn-generate"
             type="button"
             :disabled="speichernLaeuft"
             @click="fuehreSpeichernDurch"
           >
-            {{ speichernLaeuft ? 'Wird gespeichert…' : 'Speichern & herunterladen' }}
+            {{ speichernLaeuft ? 'Wird gespeichert…' : 'Als Datei herunterladen' }}
+          </button>
+          <button
+            v-if="kannAnSVWSServerSenden"
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="speichernLaeuft"
+            @click="fuehreServerSpeichernDurch"
+          >
+            {{ speichernLaeuft ? 'Wird gespeichert…' : 'Auf Server speichern' }}
           </button>
         </div>
       </div>
     </div>
 
     <!-- Laden-Modal -->
-    <div v-if="ladenModalOffen" class="modal-backdrop" @click.self="schliesseLabenModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="laden-modal-title">
+    <div
+      v-if="ladenModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseLadenModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="laden-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="laden-modal-title">Konfiguration laden</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseLabenModal">✕</button>
+          <h2 id="laden-modal-title">
+            Konfiguration laden
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseLadenModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Verschlüsselte GradeHub-Konfigurationsdatei (.ghb) auswählen.</p>
-          <p v-if="ladenFehler" class="error">{{ ladenFehler }}</p>
-          <label class="modal-form-label" for="laden-datei">Datei</label>
+          <p class="modal-meta">
+            Konfiguration vom SVWS-Server oder aus einer Sicherungsdatei (.ghb) laden.
+          </p>
+          <div
+            v-if="serverKonfigVorhanden"
+            class="modal-server-hinweis"
+          >
+            Gespeicherte Konfiguration auf dem Server gefunden — Kennwort eingeben und „Vom Server laden" klicken.
+          </div>
+          <p
+            v-if="ladenFehler"
+            class="error"
+          >
+            {{ ladenFehler }}
+          </p>
+          <label
+            class="modal-form-label"
+            for="laden-datei"
+          >Datei</label>
           <div class="modal-file-row">
-            <label class="btn-generate modal-file-label" for="laden-datei">Datei wählen…</label>
+            <label
+              class="btn-generate modal-file-label"
+              for="laden-datei"
+            >Datei wählen…</label>
             <span class="modal-file-name">{{ ladenDateiName || 'Keine Datei ausgewählt' }}</span>
           </div>
           <input
@@ -1567,8 +699,11 @@ onUnmounted(() => {
             type="file"
             accept=".ghb,application/json"
             @change="onLadenDateiGewaehlt"
-          />
-          <label class="modal-form-label" for="laden-pw">Kennwort</label>
+          >
+          <label
+            class="modal-form-label"
+            for="laden-pw"
+          >Kennwort</label>
           <input
             id="laden-pw"
             v-model="ladenKennwort"
@@ -1576,32 +711,70 @@ onUnmounted(() => {
             type="password"
             autocomplete="current-password"
             placeholder="Kennwort eingeben"
-          />
+          >
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseLabenModal">Abbrechen</button>
           <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseLadenModal"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            :disabled="ladenLaeuft || ladenVomServerLaeuft"
+            @click="fuehreLadenDurch"
+          >
+            {{ ladenLaeuft ? 'Wird geladen…' : 'Aus Datei laden' }}
+          </button>
+          <button
+            v-if="kannAnSVWSServerSenden"
             class="btn-generate btn-generate--aktiv"
             type="button"
-            :disabled="ladenLaeuft"
-            @click="fuehreLabenDurch"
+            :disabled="ladenLaeuft || ladenVomServerLaeuft || !serverKonfigVorhanden"
+            @click="fuehreServerLabenDurch"
           >
-            {{ ladenLaeuft ? 'Wird geladen…' : 'Laden' }}
+            {{ ladenVomServerLaeuft ? 'Wird geladen…' : 'Vom Server laden' }}
           </button>
         </div>
       </div>
     </div>
     <!-- Versand-Modal -->
-    <div v-if="versandModalOffen" class="modal-backdrop" @click.self="schliesseVersandModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="versand-modal-title">
+    <div
+      v-if="versandModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseVersandModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="versand-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="versand-modal-title">Dateien versenden</h2>
-          <button class="modal-close" type="button" :disabled="versandLaeuft" aria-label="Schließen" @click="schliesseVersandModal">✕</button>
+          <h2 id="versand-modal-title">
+            Dateien versenden
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            :disabled="versandLaeuft"
+            aria-label="Schließen"
+            @click="schliesseVersandModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
           <p class="modal-meta">
-            <template v-if="versandLaeuft">{{ versandFortschritt }} / {{ versandGesamt }} wird versendet…</template>
-            <template v-else>{{ versandErgebnisse.filter(e => e.erfolg).length }} von {{ versandGesamt }} erfolgreich gesendet.</template>
+            <template v-if="versandLaeuft">
+              {{ versandFortschritt }} / {{ versandGesamt }} wird versendet…
+            </template>
+            <template v-else>
+              {{ versandErgebnisse.filter(e => e.erfolg).length }} von {{ versandGesamt }} erfolgreich gesendet.
+            </template>
           </p>
           <div class="versand-liste">
             <div
@@ -1617,54 +790,173 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-generate btn-generate--aktiv" type="button" :disabled="versandLaeuft" @click="schliesseVersandModal">Schließen</button>
+          <button
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="versandLaeuft"
+            @click="schliesseVersandModal"
+          >
+            Schließen
+          </button>
         </div>
       </div>
     </div>
 
     <!-- SMTP-Modal -->
-    <div v-if="smtpModalOffen" class="modal-backdrop" @click.self="schliesseSmtpModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="smtp-modal-title">
+    <div
+      v-if="smtpModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseSmtpModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="smtp-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="smtp-modal-title">E-Mail-Server konfigurieren</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSmtpModal">✕</button>
+          <h2 id="smtp-modal-title">
+            E-Mail-Server konfigurieren
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseSmtpModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Die SMTP-Daten werden beim Speichern in der Konfigurationsdatei verschlüsselt abgelegt.</p>
-          <p v-if="smtpFehler" class="error">{{ smtpFehler }}</p>
-          <label class="modal-form-label" for="smtp-host">SMTP-Server</label>
-          <input id="smtp-host" v-model="smtpHost" class="modal-input" type="text" placeholder="mail.schule.de" />
-          <label class="modal-form-label" for="smtp-port">Port</label>
-          <input id="smtp-port" v-model="smtpPort" class="modal-input" type="number" placeholder="587" />
-          <label class="modal-form-label" for="smtp-user">Benutzername</label>
-          <input id="smtp-user" v-model="smtpUser" class="modal-input" type="text" autocomplete="username" placeholder="noten@schule.de" />
-          <label class="modal-form-label" for="smtp-password">Passwort</label>
-          <input id="smtp-password" v-model="smtpPassword" class="modal-input" type="password" autocomplete="current-password" />
-          <label class="modal-form-label" for="smtp-from">Absenderadresse</label>
-          <input id="smtp-from" v-model="smtpFrom" class="modal-input" type="email" placeholder="noten@schule.de" />
+          <p class="modal-meta">
+            Die SMTP-Daten werden beim Speichern in der Konfigurationsdatei verschlüsselt abgelegt.
+          </p>
+          <p
+            v-if="smtpFehler"
+            class="error"
+          >
+            {{ smtpFehler }}
+          </p>
+          <label
+            class="modal-form-label"
+            for="smtp-host"
+          >SMTP-Server</label>
+          <input
+            id="smtp-host"
+            v-model="smtpHost"
+            class="modal-input"
+            type="text"
+            placeholder="mail.schule.de"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-port"
+          >Port</label>
+          <input
+            id="smtp-port"
+            v-model="smtpPort"
+            class="modal-input"
+            type="number"
+            placeholder="587"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-user"
+          >Benutzername</label>
+          <input
+            id="smtp-user"
+            v-model="smtpUser"
+            class="modal-input"
+            type="text"
+            autocomplete="username"
+            placeholder="noten@schule.de"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-password"
+          >Passwort</label>
+          <input
+            id="smtp-password"
+            v-model="smtpPassword"
+            class="modal-input"
+            type="password"
+            autocomplete="current-password"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-from"
+          >Absenderadresse</label>
+          <input
+            id="smtp-from"
+            v-model="smtpFrom"
+            class="modal-input"
+            type="email"
+            placeholder="noten@schule.de"
+          >
           <label class="toggle-label">
-            <input v-model="smtpTls" type="checkbox" />
+            <input
+              v-model="smtpTls"
+              type="checkbox"
+            >
             TLS/STARTTLS verwenden
           </label>
-          <div v-if="smtpTestErfolg !== null" :class="smtpTestErfolg ? 'smtp-test-ok' : 'smtp-test-fehler'">
+          <div
+            v-if="smtpTestErfolg !== null"
+            :class="smtpTestErfolg ? 'smtp-test-ok' : 'smtp-test-fehler'"
+          >
             {{ smtpTestMeldung }}
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseSmtpModal">Abbrechen</button>
-          <button class="btn-generate" type="button" :disabled="smtpTestLaeuft" @click="testeSmtpVerbindung">
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseSmtpModal"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            :disabled="smtpTestLaeuft"
+            @click="testeSmtpVerbindung"
+          >
             {{ smtpTestLaeuft ? 'Teste…' : 'Verbindung testen' }}
           </button>
-          <button class="btn-generate btn-generate--aktiv" type="button" @click="speichereSmtpKonfiguration">Übernehmen</button>
+          <button
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            @click="speichereSmtpKonfiguration"
+          >
+            Übernehmen
+          </button>
         </div>
       </div>
     </div>
     <!-- Import-Modal -->
-    <div v-if="importModalOffen" class="modal-backdrop" @click.self="schliesseImportModal">
-      <div class="modal import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+    <div
+      v-if="importModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseImportModal"
+    >
+      <div
+        class="modal import-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="import-modal-title">Notendateien importieren</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseImportModal">✕</button>
+          <h2 id="import-modal-title">
+            Notendateien importieren
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseImportModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
           <p class="modal-meta">
@@ -1672,11 +964,22 @@ onUnmounted(() => {
             Verschlüsselte Dateien werden automatisch mit den gespeicherten Notenpasswörtern entschlüsselt.
           </p>
 
-          <div v-if="importEintraege.length === 0" class="import-auswahl-row">
-            <button class="btn-generate" type="button" :disabled="importLaeuft" @click="waehleImportOrdner">
+          <div
+            v-if="importEintraege.length === 0"
+            class="import-auswahl-row"
+          >
+            <button
+              class="btn-generate"
+              type="button"
+              :disabled="importLaeuft"
+              @click="waehleImportOrdner"
+            >
               Ordner auswählen
             </button>
-            <label class="btn-generate modal-file-label" for="import-dateien">Dateien auswählen…</label>
+            <label
+              class="btn-generate modal-file-label"
+              for="import-dateien"
+            >Dateien auswählen…</label>
             <input
               id="import-dateien"
               class="modal-file-input"
@@ -1684,12 +987,20 @@ onUnmounted(() => {
               multiple
               accept=".json,.gz,.enc.json"
               @change="onImportDateienGewaehlt"
-            />
+            >
           </div>
 
-          <p v-if="importLaeuft" class="modal-meta">Wird verarbeitet…</p>
+          <p
+            v-if="importLaeuft"
+            class="modal-meta"
+          >
+            Wird verarbeitet…
+          </p>
 
-          <div v-if="importEintraege.length > 0" class="import-liste">
+          <div
+            v-if="importEintraege.length > 0"
+            class="import-liste"
+          >
             <div
               v-for="eintrag in importEintraege"
               :key="eintrag.id"
@@ -1697,17 +1008,43 @@ onUnmounted(() => {
               :class="importEintragKlasse(eintrag)"
             >
               <div class="import-eintrag-kopf">
-                <span class="import-dateiname" :title="eintrag.dateiname">{{ eintrag.dateiname }}</span>
-                <span v-if="eintrag.kuerzelErmittelt" class="import-kuerzel">{{ eintrag.kuerzelErmittelt }}</span>
+                <span
+                  class="import-dateiname"
+                  :title="eintrag.dateiname"
+                >{{ eintrag.dateiname }}</span>
+                <span
+                  v-if="eintrag.kuerzelErmittelt"
+                  class="import-kuerzel"
+                >{{ eintrag.kuerzelErmittelt }}</span>
                 <span class="import-status-badge">{{ importStatusText(eintrag) }}</span>
               </div>
 
-              <div v-if="eintrag.status === 'passwortFehlt' || eintrag.status === 'fehler'" class="import-eintrag-aktion">
-                <p v-if="eintrag.fehlerText" class="import-fehlertext">{{ eintrag.fehlerText }}</p>
-                <div v-if="eintrag.istVerschluesselt" class="import-manuell">
-                  <select v-model="eintrag.manuellKuerzel" class="import-select">
-                    <option value="">Kürzel zuordnen…</option>
-                    <option v-for="l in sichtbareLehrer" :key="l.id" :value="l.kuerzel">
+              <div
+                v-if="eintrag.status === 'passwortFehlt' || eintrag.status === 'fehler'"
+                class="import-eintrag-aktion"
+              >
+                <p
+                  v-if="eintrag.fehlerText"
+                  class="import-fehlertext"
+                >
+                  {{ eintrag.fehlerText }}
+                </p>
+                <div
+                  v-if="eintrag.istVerschluesselt"
+                  class="import-manuell"
+                >
+                  <select
+                    v-model="eintrag.manuellKuerzel"
+                    class="import-select"
+                  >
+                    <option value="">
+                      Kürzel zuordnen…
+                    </option>
+                    <option
+                      v-for="l in sichtbareLehrer"
+                      :key="l.id"
+                      :value="l.kuerzel"
+                    >
                       {{ l.kuerzel }} – {{ l.nachname }}, {{ l.vorname }}
                     </option>
                   </select>
@@ -1716,7 +1053,7 @@ onUnmounted(() => {
                     type="password"
                     class="import-pw-input"
                     placeholder="Kennwort (falls abweichend)"
-                  />
+                  >
                   <button
                     class="btn-generate"
                     type="button"
@@ -1728,7 +1065,10 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <div v-if="eintrag.status === 'ok' && kannAnSVWSServerSenden" class="import-eintrag-senden">
+              <div
+                v-if="eintrag.status === 'ok' && kannAnSVWSServerSenden"
+                class="import-eintrag-senden"
+              >
                 <button
                   class="btn-generate btn-generate--aktiv"
                   type="button"
@@ -1737,10 +1077,16 @@ onUnmounted(() => {
                 >
                   {{ eintrag.sendeLaeuft ? 'Wird gesendet…' : 'An SVWS-Server senden' }}
                 </button>
-                <span v-if="eintrag.sendeFehler" class="import-fehlertext">{{ eintrag.sendeFehler }}</span>
+                <span
+                  v-if="eintrag.sendeFehler"
+                  class="import-fehlertext"
+                >{{ eintrag.sendeFehler }}</span>
               </div>
 
-              <div v-if="eintrag.status === 'ok' && !kannAnSVWSServerSenden" class="import-eintrag-senden">
+              <div
+                v-if="eintrag.status === 'ok' && !kannAnSVWSServerSenden"
+                class="import-eintrag-senden"
+              >
                 <span class="modal-meta">Kein SVWS-Server verbunden – Datei kann nicht übertragen werden.</span>
               </div>
             </div>
@@ -1765,7 +1111,13 @@ onUnmounted(() => {
           >
             {{ importAllesendenLaeuft ? 'Wird gesendet…' : `Alle ${importErfolgreicheAnzahl} an Server senden` }}
           </button>
-          <button class="btn-generate" type="button" @click="schliesseImportModal">Schließen</button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseImportModal"
+          >
+            Schließen
+          </button>
         </div>
       </div>
     </div>
@@ -2489,6 +1841,15 @@ td.col-check input[type='checkbox'] {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.modal-server-hinweis {
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.4rem;
+  font-size: 0.88rem;
+  color: var(--color-success-text);
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .smtp-test-ok,

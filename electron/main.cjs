@@ -1,16 +1,27 @@
 'use strict'
 
 const { app, BrowserWindow, session, Menu } = require('electron')
-const path = require('path')
+const { createServer: createNetServer } = require('net')
 
+function findFreePort(start = 3000) {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer()
+    server.once('listening', () => {
+      const { port } = server.address()
+      server.close(() => resolve(port))
+    })
+    server.once('error', () => findFreePort(start + 1).then(resolve).catch(reject))
+    server.listen(start)
+  })
+}
 
 function fixCorsHeaders(details, callback) {
   const origin = details.requestHeaders?.['Origin'] ?? details.requestHeaders?.['origin']
   const headers = { ...details.responseHeaders }
 
   // Der SVWS-Server sendet credentials:true + allow-origin:* — laut CORS-Spec ungültig.
-  // Im Electron-Main-Process ersetzen wir den Wildcard durch die tatsächliche Origin
-  // (also "null" für file://-Seiten), damit der Renderer die Antwort akzeptiert.
+  // Im Electron-Main-Process ersetzen wir den Wildcard durch die tatsächliche Origin,
+  // damit der Renderer die Antwort akzeptiert.
   if (origin) {
     headers['access-control-allow-origin'] = [origin]
     headers['access-control-allow-credentials'] = ['true']
@@ -19,7 +30,9 @@ function fixCorsHeaders(details, callback) {
   callback({ responseHeaders: headers })
 }
 
-function createWindow() {
+let expressServer = null
+
+function createWindow(port) {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -45,7 +58,7 @@ function createWindow() {
     }
   })
 
-  win.loadFile(path.join(__dirname, '../dist/index.html'))
+  win.loadURL(`http://localhost:${port}`)
 }
 
 // Selbstsignierte Zertifikate des SVWS-Servers akzeptieren
@@ -54,7 +67,11 @@ app.on('certificate-error', (event, _webContents, _url, _error, _certificate, ca
   callback(true)
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const port = await findFreePort(3000)
+  const { startServer } = await import('../server.js')
+  expressServer = await startServer(port)
+
   const menu = Menu.buildFromTemplate([
     {
       label: 'Datei',
@@ -91,11 +108,15 @@ app.whenReady().then(() => {
   ])
   Menu.setApplicationMenu(menu)
 
-  createWindow()
+  createWindow(port)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(port)
   })
+})
+
+app.on('before-quit', () => {
+  if (expressServer) expressServer.close()
 })
 
 app.on('window-all-closed', () => {
