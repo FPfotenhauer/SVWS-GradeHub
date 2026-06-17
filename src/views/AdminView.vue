@@ -231,7 +231,7 @@ async function pruefeBackendVerfuegbar(): Promise<void> {
 }
 
 onMounted(() => {
-  ladeLehrerListe()
+  void ladeLehrerListe()
   void pruefeServerKonfiguration()
   void pruefeBackendVerfuegbar()
 })
@@ -768,7 +768,7 @@ async function pruefeServerKonfiguration(): Promise<void> {
   }
 }
 
-function schliesseLabenModal(): void {
+function schliesseLadenModal(): void {
   ladenModalOffen.value = false
 }
 
@@ -786,7 +786,7 @@ function onLadenDateiGewaehlt(event: Event): void {
   reader.readAsText(file)
 }
 
-async function fuehreLabenDurch(): Promise<void> {
+async function fuehreLadenDurch(): Promise<void> {
   if (!ladenDateiText.value) {
     ladenFehler.value = 'Bitte eine Datei auswählen.'
     return
@@ -1435,19 +1435,45 @@ onUnmounted(() => {
     <div class="page-header">
       <h1>Notendatei Adminbereich</h1>
       <div class="theme-row">
-        <label class="theme-control" for="admin-theme-select">Theme</label>
-        <select id="admin-theme-select" :value="themePreference" @change="onThemeChange">
-          <option value="system">System</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
+        <label
+          class="theme-control"
+          for="admin-theme-select"
+        >Theme</label>
+        <select
+          id="admin-theme-select"
+          :value="themePreference"
+          @change="onThemeChange"
+        >
+          <option value="system">
+            System
+          </option>
+          <option value="light">
+            Light
+          </option>
+          <option value="dark">
+            Dark
+          </option>
         </select>
       </div>
     </div>
 
-    <p v-if="isLoading" class="status">Lehrkräfte werden geladen…</p>
-    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+    <p
+      v-if="isLoading"
+      class="status"
+    >
+      Lehrkräfte werden geladen…
+    </p>
+    <p
+      v-if="errorMessage"
+      class="error"
+    >
+      {{ errorMessage }}
+    </p>
 
-    <section v-if="lehrer.length > 0" class="card">
+    <section
+      v-if="lehrer.length > 0"
+      class="card"
+    >
       <div class="table-header">
         <div class="table-header-left">
           <h2>Lehrkräfte ({{ sichtbareLehrer.length }})</h2>
@@ -1523,21 +1549,30 @@ onUnmounted(() => {
         </div>
         <div class="table-header-actions">
           <label class="toggle-label">
-            <input v-model="nurAktive" type="checkbox" />
+            <input
+              v-model="nurAktive"
+              type="checkbox"
+            >
             Nur aktive anzeigen
           </label>
-          <button class="btn-logout" type="button" @click="logout">Abmelden</button>
+          <button
+            class="btn-logout"
+            type="button"
+            @click="logout"
+          >
+            Abmelden
+          </button>
         </div>
       </div>
 
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col class="col-check" />
-            <col :style="spaltenStil('kuerzel')" />
-            <col :style="spaltenStil('name')" />
-            <col :style="spaltenStil('email')" />
-            <col :style="spaltenStil('passwort')" />
+            <col class="col-check">
+            <col :style="spaltenStil('kuerzel')">
+            <col :style="spaltenStil('name')">
+            <col :style="spaltenStil('email')">
+            <col :style="spaltenStil('passwort')">
           </colgroup>
           <thead>
             <tr>
@@ -1547,33 +1582,51 @@ onUnmounted(() => {
                   :checked="alleAusgewaehlt"
                   aria-label="Alle auswählen"
                   @change="toggleAlle"
-                />
+                >
               </th>
               <th class="col-kuerzel">
                 Kürzel
-                <span class="resize-handle" @mousedown="starteResize('kuerzel', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('kuerzel', $event)"
+                />
               </th>
               <th class="col-name">
                 Name, Vorname
-                <span class="resize-handle" @mousedown="starteResize('name', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('name', $event)"
+                />
               </th>
               <th class="col-email">
                 E-Mail (dienstlich)
-                <span class="resize-handle" @mousedown="starteResize('email', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('email', $event)"
+                />
               </th>
               <th class="col-passwort">
                 Notenpasswort
-                <span class="resize-handle" @mousedown="starteResize('passwort', $event)" />
+                <span
+                  class="resize-handle"
+                  @mousedown="starteResize('passwort', $event)"
+                />
               </th>
             </tr>
           </thead>
           <tfoot>
             <tr>
-              <td colspan="5" class="tfoot-cell">
+              <td
+                colspan="5"
+                class="tfoot-cell"
+              >
                 <span v-if="ausgewaehlt.size > 0">
                   {{ ausgewaehlt.size }} Lehrkraft{{ ausgewaehlt.size !== 1 ? 'kräfte' : '' }} ausgewählt
                 </span>
-                <span v-else class="tfoot-empty">Keine Auswahl</span>
+                <span
+                  v-else
+                  class="tfoot-empty"
+                >Keine Auswahl</span>
               </td>
             </tr>
           </tfoot>
@@ -1590,11 +1643,17 @@ onUnmounted(() => {
                   :checked="ausgewaehlt.has(l.id)"
                   @click.stop
                   @change="toggleAuswahl(l.id)"
-                />
+                >
               </td>
-              <td class="col-kuerzel">{{ l.kuerzel }}</td>
-              <td class="col-name">{{ l.nachname }}, {{ l.vorname }}</td>
-              <td class="col-email">{{ l.emailDienstlich }}</td>
+              <td class="col-kuerzel">
+                {{ l.kuerzel }}
+              </td>
+              <td class="col-name">
+                {{ l.nachname }}, {{ l.vorname }}
+              </td>
+              <td class="col-email">
+                {{ l.emailDienstlich }}
+              </td>
               <td class="col-passwort">
                 <div class="col-passwort-inhalt">
                   <span class="passwort-text">{{ l.notenpasswort || '-' }}</span>
@@ -1617,18 +1676,46 @@ onUnmounted(() => {
     </section>
 
     <!-- Schlüssel-Modal -->
-    <div v-if="schluesselModalOffen" class="modal-backdrop" @click.self="schliesseSchluesselModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="schluessel-modal-title">
+    <div
+      v-if="schluesselModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseSchluesselModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="schluessel-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="schluessel-modal-title">Schlüsselpaar generieren</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSchluesselModal">✕</button>
+          <h2 id="schluessel-modal-title">
+            Schlüsselpaar generieren
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseSchluesselModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Algorithmus: RSA-OAEP · SHA-256 · 4096 Bit</p>
+          <p class="modal-meta">
+            Algorithmus: RSA-OAEP · SHA-256 · 4096 Bit
+          </p>
 
-          <p v-if="schluesselFehler" class="error">{{ schluesselFehler }}</p>
+          <p
+            v-if="schluesselFehler"
+            class="error"
+          >
+            {{ schluesselFehler }}
+          </p>
 
-          <div v-if="!schluesselGeneriert" class="modal-action-row">
+          <div
+            v-if="!schluesselGeneriert"
+            class="modal-action-row"
+          >
             <button
               class="btn-generate"
               type="button"
@@ -1639,13 +1726,22 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <div v-else class="modal-success">
+          <div
+            v-else
+            class="modal-success"
+          >
             <span class="modal-success-icon">✓</span>
             Schlüsselpaar wurde erfolgreich erzeugt.
           </div>
 
-          <div v-if="oeffentlicherSchluesselPem" class="modal-key-block">
-            <label for="schluessel-pem-output" class="modal-key-label">Öffentlicher Schlüssel</label>
+          <div
+            v-if="oeffentlicherSchluesselPem"
+            class="modal-key-block"
+          >
+            <label
+              for="schluessel-pem-output"
+              class="modal-key-label"
+            >Öffentlicher Schlüssel</label>
             <textarea
               id="schluessel-pem-output"
               class="modal-key-textarea"
@@ -1654,8 +1750,14 @@ onUnmounted(() => {
             />
           </div>
 
-          <div v-if="privaterSchluesselPem" class="modal-key-block">
-            <label for="schluessel-priv-output" class="modal-key-label modal-key-label--privat">Privater Schlüssel <span class="modal-key-warn">(geheim halten!)</span></label>
+          <div
+            v-if="privaterSchluesselPem"
+            class="modal-key-block"
+          >
+            <label
+              for="schluessel-priv-output"
+              class="modal-key-label modal-key-label--privat"
+            >Privater Schlüssel <span class="modal-key-warn">(geheim halten!)</span></label>
             <textarea
               id="schluessel-priv-output"
               class="modal-key-textarea"
@@ -1665,24 +1767,56 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseSchluesselModal">Schließen</button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseSchluesselModal"
+          >
+            Schließen
+          </button>
         </div>
       </div>
     </div>
 
     <!-- Speichern-Modal -->
-    <div v-if="speichernModalOffen" class="modal-backdrop" @click.self="schliesseSpeichernModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="speichern-modal-title">
+    <div
+      v-if="speichernModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseSpeichernModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="speichern-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="speichern-modal-title">Konfiguration speichern</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSpeichernModal">✕</button>
+          <h2 id="speichern-modal-title">
+            Konfiguration speichern
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseSpeichernModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
           <p class="modal-meta">
             Die Daten werden mit AES-256-GCM verschlüsselt. Auf dem SVWS-Server gespeicherte Konfiguration kann von jedem Gerät geladen werden.
           </p>
-          <p v-if="speichernFehler" class="error">{{ speichernFehler }}</p>
-          <label class="modal-form-label" for="speichern-pw">Kennwort</label>
+          <p
+            v-if="speichernFehler"
+            class="error"
+          >
+            {{ speichernFehler }}
+          </p>
+          <label
+            class="modal-form-label"
+            for="speichern-pw"
+          >Kennwort</label>
           <input
             id="speichern-pw"
             v-model="speichernKennwort"
@@ -1690,8 +1824,11 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             placeholder="Mindestens 8 Zeichen"
-          />
-          <label class="modal-form-label" for="speichern-pw2">Kennwort bestätigen</label>
+          >
+          <label
+            class="modal-form-label"
+            for="speichern-pw2"
+          >Kennwort bestätigen</label>
           <input
             id="speichern-pw2"
             v-model="speichernKennwortBestaetigung"
@@ -1699,10 +1836,16 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             placeholder="Kennwort wiederholen"
-          />
+          >
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseSpeichernModal">Abbrechen</button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseSpeichernModal"
+          >
+            Abbrechen
+          </button>
           <button
             class="btn-generate"
             type="button"
@@ -1725,11 +1868,29 @@ onUnmounted(() => {
     </div>
 
     <!-- Laden-Modal -->
-    <div v-if="ladenModalOffen" class="modal-backdrop" @click.self="schliesseLabenModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="laden-modal-title">
+    <div
+      v-if="ladenModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseLadenModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="laden-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="laden-modal-title">Konfiguration laden</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseLabenModal">✕</button>
+          <h2 id="laden-modal-title">
+            Konfiguration laden
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseLadenModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
           <p class="modal-meta">
@@ -1741,10 +1902,21 @@ onUnmounted(() => {
           >
             Gespeicherte Konfiguration auf dem Server gefunden — Kennwort eingeben und „Vom Server laden" klicken.
           </div>
-          <p v-if="ladenFehler" class="error">{{ ladenFehler }}</p>
-          <label class="modal-form-label" for="laden-datei">Datei</label>
+          <p
+            v-if="ladenFehler"
+            class="error"
+          >
+            {{ ladenFehler }}
+          </p>
+          <label
+            class="modal-form-label"
+            for="laden-datei"
+          >Datei</label>
           <div class="modal-file-row">
-            <label class="btn-generate modal-file-label" for="laden-datei">Datei wählen…</label>
+            <label
+              class="btn-generate modal-file-label"
+              for="laden-datei"
+            >Datei wählen…</label>
             <span class="modal-file-name">{{ ladenDateiName || 'Keine Datei ausgewählt' }}</span>
           </div>
           <input
@@ -1753,8 +1925,11 @@ onUnmounted(() => {
             type="file"
             accept=".ghb,application/json"
             @change="onLadenDateiGewaehlt"
-          />
-          <label class="modal-form-label" for="laden-pw">Kennwort</label>
+          >
+          <label
+            class="modal-form-label"
+            for="laden-pw"
+          >Kennwort</label>
           <input
             id="laden-pw"
             v-model="ladenKennwort"
@@ -1762,15 +1937,21 @@ onUnmounted(() => {
             type="password"
             autocomplete="current-password"
             placeholder="Kennwort eingeben"
-          />
+          >
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseLabenModal">Abbrechen</button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseLadenModal"
+          >
+            Abbrechen
+          </button>
           <button
             class="btn-generate"
             type="button"
             :disabled="ladenLaeuft || ladenVomServerLaeuft"
-            @click="fuehreLabenDurch"
+            @click="fuehreLadenDurch"
           >
             {{ ladenLaeuft ? 'Wird geladen…' : 'Aus Datei laden' }}
           </button>
@@ -1787,16 +1968,39 @@ onUnmounted(() => {
       </div>
     </div>
     <!-- Versand-Modal -->
-    <div v-if="versandModalOffen" class="modal-backdrop" @click.self="schliesseVersandModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="versand-modal-title">
+    <div
+      v-if="versandModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseVersandModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="versand-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="versand-modal-title">Dateien versenden</h2>
-          <button class="modal-close" type="button" :disabled="versandLaeuft" aria-label="Schließen" @click="schliesseVersandModal">✕</button>
+          <h2 id="versand-modal-title">
+            Dateien versenden
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            :disabled="versandLaeuft"
+            aria-label="Schließen"
+            @click="schliesseVersandModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
           <p class="modal-meta">
-            <template v-if="versandLaeuft">{{ versandFortschritt }} / {{ versandGesamt }} wird versendet…</template>
-            <template v-else>{{ versandErgebnisse.filter(e => e.erfolg).length }} von {{ versandGesamt }} erfolgreich gesendet.</template>
+            <template v-if="versandLaeuft">
+              {{ versandFortschritt }} / {{ versandGesamt }} wird versendet…
+            </template>
+            <template v-else>
+              {{ versandErgebnisse.filter(e => e.erfolg).length }} von {{ versandGesamt }} erfolgreich gesendet.
+            </template>
           </p>
           <div class="versand-liste">
             <div
@@ -1812,54 +2016,173 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-generate btn-generate--aktiv" type="button" :disabled="versandLaeuft" @click="schliesseVersandModal">Schließen</button>
+          <button
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            :disabled="versandLaeuft"
+            @click="schliesseVersandModal"
+          >
+            Schließen
+          </button>
         </div>
       </div>
     </div>
 
     <!-- SMTP-Modal -->
-    <div v-if="smtpModalOffen" class="modal-backdrop" @click.self="schliesseSmtpModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="smtp-modal-title">
+    <div
+      v-if="smtpModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseSmtpModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="smtp-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="smtp-modal-title">E-Mail-Server konfigurieren</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseSmtpModal">✕</button>
+          <h2 id="smtp-modal-title">
+            E-Mail-Server konfigurieren
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseSmtpModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p class="modal-meta">Die SMTP-Daten werden beim Speichern in der Konfigurationsdatei verschlüsselt abgelegt.</p>
-          <p v-if="smtpFehler" class="error">{{ smtpFehler }}</p>
-          <label class="modal-form-label" for="smtp-host">SMTP-Server</label>
-          <input id="smtp-host" v-model="smtpHost" class="modal-input" type="text" placeholder="mail.schule.de" />
-          <label class="modal-form-label" for="smtp-port">Port</label>
-          <input id="smtp-port" v-model="smtpPort" class="modal-input" type="number" placeholder="587" />
-          <label class="modal-form-label" for="smtp-user">Benutzername</label>
-          <input id="smtp-user" v-model="smtpUser" class="modal-input" type="text" autocomplete="username" placeholder="noten@schule.de" />
-          <label class="modal-form-label" for="smtp-password">Passwort</label>
-          <input id="smtp-password" v-model="smtpPassword" class="modal-input" type="password" autocomplete="current-password" />
-          <label class="modal-form-label" for="smtp-from">Absenderadresse</label>
-          <input id="smtp-from" v-model="smtpFrom" class="modal-input" type="email" placeholder="noten@schule.de" />
+          <p class="modal-meta">
+            Die SMTP-Daten werden beim Speichern in der Konfigurationsdatei verschlüsselt abgelegt.
+          </p>
+          <p
+            v-if="smtpFehler"
+            class="error"
+          >
+            {{ smtpFehler }}
+          </p>
+          <label
+            class="modal-form-label"
+            for="smtp-host"
+          >SMTP-Server</label>
+          <input
+            id="smtp-host"
+            v-model="smtpHost"
+            class="modal-input"
+            type="text"
+            placeholder="mail.schule.de"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-port"
+          >Port</label>
+          <input
+            id="smtp-port"
+            v-model="smtpPort"
+            class="modal-input"
+            type="number"
+            placeholder="587"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-user"
+          >Benutzername</label>
+          <input
+            id="smtp-user"
+            v-model="smtpUser"
+            class="modal-input"
+            type="text"
+            autocomplete="username"
+            placeholder="noten@schule.de"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-password"
+          >Passwort</label>
+          <input
+            id="smtp-password"
+            v-model="smtpPassword"
+            class="modal-input"
+            type="password"
+            autocomplete="current-password"
+          >
+          <label
+            class="modal-form-label"
+            for="smtp-from"
+          >Absenderadresse</label>
+          <input
+            id="smtp-from"
+            v-model="smtpFrom"
+            class="modal-input"
+            type="email"
+            placeholder="noten@schule.de"
+          >
           <label class="toggle-label">
-            <input v-model="smtpTls" type="checkbox" />
+            <input
+              v-model="smtpTls"
+              type="checkbox"
+            >
             TLS/STARTTLS verwenden
           </label>
-          <div v-if="smtpTestErfolg !== null" :class="smtpTestErfolg ? 'smtp-test-ok' : 'smtp-test-fehler'">
+          <div
+            v-if="smtpTestErfolg !== null"
+            :class="smtpTestErfolg ? 'smtp-test-ok' : 'smtp-test-fehler'"
+          >
             {{ smtpTestMeldung }}
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-generate" type="button" @click="schliesseSmtpModal">Abbrechen</button>
-          <button class="btn-generate" type="button" :disabled="smtpTestLaeuft" @click="testeSmtpVerbindung">
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseSmtpModal"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            :disabled="smtpTestLaeuft"
+            @click="testeSmtpVerbindung"
+          >
             {{ smtpTestLaeuft ? 'Teste…' : 'Verbindung testen' }}
           </button>
-          <button class="btn-generate btn-generate--aktiv" type="button" @click="speichereSmtpKonfiguration">Übernehmen</button>
+          <button
+            class="btn-generate btn-generate--aktiv"
+            type="button"
+            @click="speichereSmtpKonfiguration"
+          >
+            Übernehmen
+          </button>
         </div>
       </div>
     </div>
     <!-- Import-Modal -->
-    <div v-if="importModalOffen" class="modal-backdrop" @click.self="schliesseImportModal">
-      <div class="modal import-modal" role="dialog" aria-modal="true" aria-labelledby="import-modal-title">
+    <div
+      v-if="importModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseImportModal"
+    >
+      <div
+        class="modal import-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="import-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="import-modal-title">Notendateien importieren</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseImportModal">✕</button>
+          <h2 id="import-modal-title">
+            Notendateien importieren
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseImportModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
           <p class="modal-meta">
@@ -1867,11 +2190,22 @@ onUnmounted(() => {
             Verschlüsselte Dateien werden automatisch mit den gespeicherten Notenpasswörtern entschlüsselt.
           </p>
 
-          <div v-if="importEintraege.length === 0" class="import-auswahl-row">
-            <button class="btn-generate" type="button" :disabled="importLaeuft" @click="waehleImportOrdner">
+          <div
+            v-if="importEintraege.length === 0"
+            class="import-auswahl-row"
+          >
+            <button
+              class="btn-generate"
+              type="button"
+              :disabled="importLaeuft"
+              @click="waehleImportOrdner"
+            >
               Ordner auswählen
             </button>
-            <label class="btn-generate modal-file-label" for="import-dateien">Dateien auswählen…</label>
+            <label
+              class="btn-generate modal-file-label"
+              for="import-dateien"
+            >Dateien auswählen…</label>
             <input
               id="import-dateien"
               class="modal-file-input"
@@ -1879,12 +2213,20 @@ onUnmounted(() => {
               multiple
               accept=".json,.gz,.enc.json"
               @change="onImportDateienGewaehlt"
-            />
+            >
           </div>
 
-          <p v-if="importLaeuft" class="modal-meta">Wird verarbeitet…</p>
+          <p
+            v-if="importLaeuft"
+            class="modal-meta"
+          >
+            Wird verarbeitet…
+          </p>
 
-          <div v-if="importEintraege.length > 0" class="import-liste">
+          <div
+            v-if="importEintraege.length > 0"
+            class="import-liste"
+          >
             <div
               v-for="eintrag in importEintraege"
               :key="eintrag.id"
@@ -1892,17 +2234,43 @@ onUnmounted(() => {
               :class="importEintragKlasse(eintrag)"
             >
               <div class="import-eintrag-kopf">
-                <span class="import-dateiname" :title="eintrag.dateiname">{{ eintrag.dateiname }}</span>
-                <span v-if="eintrag.kuerzelErmittelt" class="import-kuerzel">{{ eintrag.kuerzelErmittelt }}</span>
+                <span
+                  class="import-dateiname"
+                  :title="eintrag.dateiname"
+                >{{ eintrag.dateiname }}</span>
+                <span
+                  v-if="eintrag.kuerzelErmittelt"
+                  class="import-kuerzel"
+                >{{ eintrag.kuerzelErmittelt }}</span>
                 <span class="import-status-badge">{{ importStatusText(eintrag) }}</span>
               </div>
 
-              <div v-if="eintrag.status === 'passwortFehlt' || eintrag.status === 'fehler'" class="import-eintrag-aktion">
-                <p v-if="eintrag.fehlerText" class="import-fehlertext">{{ eintrag.fehlerText }}</p>
-                <div v-if="eintrag.istVerschluesselt" class="import-manuell">
-                  <select v-model="eintrag.manuellKuerzel" class="import-select">
-                    <option value="">Kürzel zuordnen…</option>
-                    <option v-for="l in sichtbareLehrer" :key="l.id" :value="l.kuerzel">
+              <div
+                v-if="eintrag.status === 'passwortFehlt' || eintrag.status === 'fehler'"
+                class="import-eintrag-aktion"
+              >
+                <p
+                  v-if="eintrag.fehlerText"
+                  class="import-fehlertext"
+                >
+                  {{ eintrag.fehlerText }}
+                </p>
+                <div
+                  v-if="eintrag.istVerschluesselt"
+                  class="import-manuell"
+                >
+                  <select
+                    v-model="eintrag.manuellKuerzel"
+                    class="import-select"
+                  >
+                    <option value="">
+                      Kürzel zuordnen…
+                    </option>
+                    <option
+                      v-for="l in sichtbareLehrer"
+                      :key="l.id"
+                      :value="l.kuerzel"
+                    >
                       {{ l.kuerzel }} – {{ l.nachname }}, {{ l.vorname }}
                     </option>
                   </select>
@@ -1911,7 +2279,7 @@ onUnmounted(() => {
                     type="password"
                     class="import-pw-input"
                     placeholder="Kennwort (falls abweichend)"
-                  />
+                  >
                   <button
                     class="btn-generate"
                     type="button"
@@ -1923,7 +2291,10 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <div v-if="eintrag.status === 'ok' && kannAnSVWSServerSenden" class="import-eintrag-senden">
+              <div
+                v-if="eintrag.status === 'ok' && kannAnSVWSServerSenden"
+                class="import-eintrag-senden"
+              >
                 <button
                   class="btn-generate btn-generate--aktiv"
                   type="button"
@@ -1932,10 +2303,16 @@ onUnmounted(() => {
                 >
                   {{ eintrag.sendeLaeuft ? 'Wird gesendet…' : 'An SVWS-Server senden' }}
                 </button>
-                <span v-if="eintrag.sendeFehler" class="import-fehlertext">{{ eintrag.sendeFehler }}</span>
+                <span
+                  v-if="eintrag.sendeFehler"
+                  class="import-fehlertext"
+                >{{ eintrag.sendeFehler }}</span>
               </div>
 
-              <div v-if="eintrag.status === 'ok' && !kannAnSVWSServerSenden" class="import-eintrag-senden">
+              <div
+                v-if="eintrag.status === 'ok' && !kannAnSVWSServerSenden"
+                class="import-eintrag-senden"
+              >
                 <span class="modal-meta">Kein SVWS-Server verbunden – Datei kann nicht übertragen werden.</span>
               </div>
             </div>
@@ -1960,7 +2337,13 @@ onUnmounted(() => {
           >
             {{ importAllesendenLaeuft ? 'Wird gesendet…' : `Alle ${importErfolgreicheAnzahl} an Server senden` }}
           </button>
-          <button class="btn-generate" type="button" @click="schliesseImportModal">Schließen</button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="schliesseImportModal"
+          >
+            Schließen
+          </button>
         </div>
       </div>
     </div>

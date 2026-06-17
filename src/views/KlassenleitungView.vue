@@ -550,48 +550,100 @@ function goSave(): void {
 <template>
   <main class="klassenleitung-view">
     <header class="page-header">
-      <button class="btn secondary" type="button" @click="goBack">Lerngruppen</button>
+      <button
+        class="btn secondary"
+        type="button"
+        @click="goBack"
+      >
+        Lerngruppen
+      </button>
       <div class="title-wrap">
         <h1>Klassenleitung {{ klasse?.kuerzelAnzeige || klasse?.kuerzel || '' }}</h1>
         <p class="subtitle">
           {{ schuelerListe.length }} SuS
-          <span v-if="rowChangeCount > 0" class="badge-geaendert">{{ rowChangeCount }} geändert</span>
+          <span
+            v-if="rowChangeCount > 0"
+            class="badge-geaendert"
+          >{{ rowChangeCount }} geändert</span>
         </p>
       </div>
-      <button class="btn primary" type="button" :disabled="globalChangeCount === 0" @click="goSave">
+      <button
+        class="btn primary"
+        type="button"
+        :disabled="globalChangeCount === 0"
+        @click="goSave"
+      >
         Speichern
       </button>
     </header>
 
-    <section v-if="!klasse" class="card">
+    <section
+      v-if="!klasse"
+      class="card"
+    >
       <p>Klasse nicht gefunden.</p>
-      <button class="btn secondary" type="button" @click="goBack">Zurück</button>
+      <button
+        class="btn secondary"
+        type="button"
+        @click="goBack"
+      >
+        Zurück
+      </button>
     </section>
 
-    <section v-else class="table-wrap">
+    <section
+      v-else
+      class="table-wrap"
+    >
       <table class="table">
         <colgroup>
-          <col style="width: 3.5rem" />
-          <col style="width: 14rem" />
-          <col style="width: 5rem" />
-          <col style="width: 5rem" />
-          <col v-if="showLernbereiche" style="width: 5rem" />
-          <col v-if="showLernbereiche" style="width: 5rem" />
-          <col />
-          <col />
-          <col />
+          <col style="width: 3.5rem">
+          <col style="width: 14rem">
+          <col style="width: 5rem">
+          <col style="width: 5rem">
+          <col
+            v-if="showLernbereiche"
+            style="width: 5rem"
+          >
+          <col
+            v-if="showLernbereiche"
+            style="width: 5rem"
+          >
+          <col>
+          <col>
+          <col>
         </colgroup>
         <thead>
           <tr>
             <th>#</th>
             <th>Name</th>
-            <th title="Fehlstunden gesamt">FSG</th>
-            <th title="Fehlstunden unentschuldigt">FSU</th>
-            <th v-if="showLernbereiche" title="Lernbereichsnote Arbeitslehre">AL</th>
-            <th v-if="showLernbereiche" title="Lernbereichsnote Naturwissenschaft">NW</th>
-            <th title="Arbeits- und Sozialverhalten">ASV</th>
-            <th title="Außerunterrichtliches Engagement">AUE</th>
-            <th title="Zeugnisbemerkungen">ZB</th>
+            <th title="Fehlstunden gesamt">
+              FSG
+            </th>
+            <th title="Fehlstunden unentschuldigt">
+              FSU
+            </th>
+            <th
+              v-if="showLernbereiche"
+              title="Lernbereichsnote Arbeitslehre"
+            >
+              AL
+            </th>
+            <th
+              v-if="showLernbereiche"
+              title="Lernbereichsnote Naturwissenschaft"
+            >
+              NW
+            </th>
+            <th title="Arbeits- und Sozialverhalten">
+              ASV
+            </th>
+            <th title="Außerunterrichtliches Engagement">
+              AUE
+            </th>
+            <th title="Zeugnisbemerkungen">
+              ZB
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -609,98 +661,102 @@ function goSave(): void {
                 || hasChange(schueler, 'zeugnisbemerkung'),
             }"
           >
-            <td class="nr">{{ idx + 1 }}</td>
-            <td class="name">{{ schueler.nachname }}, {{ schueler.vorname }}</td>
+            <td class="nr">
+              {{ idx + 1 }}
+            </td>
+            <td class="name">
+              {{ schueler.nachname }}, {{ schueler.vorname }}
+            </td>
             <td>
               <input
+                :ref="(el) => setInputRef(el, idx, schueler, 'fehlstundenGesamt')"
                 class="input number"
                 :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'fehlstundenGesamt')), edited: hasChange(schueler, 'fehlstundenGesamt') }"
                 type="text"
                 inputmode="numeric"
                 :value="getCurrentValue(schueler, 'fehlstundenGesamt')"
-                :ref="(el) => setInputRef(el, idx, schueler, 'fehlstundenGesamt')"
                 @input="onInput($event, schueler, 'fehlstundenGesamt')"
                 @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenGesamt')"
                 @blur="onBlur($event, schueler, 'fehlstundenGesamt')"
-              />
+              >
             </td>
             <td>
               <input
+                :ref="(el) => setInputRef(el, idx, schueler, 'fehlstundenUnentschuldigt')"
                 class="input number"
                 :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'fehlstundenUnentschuldigt')), edited: hasChange(schueler, 'fehlstundenUnentschuldigt') }"
                 type="text"
                 inputmode="numeric"
                 :value="getCurrentValue(schueler, 'fehlstundenUnentschuldigt')"
-                :ref="(el) => setInputRef(el, idx, schueler, 'fehlstundenUnentschuldigt')"
                 @input="onInput($event, schueler, 'fehlstundenUnentschuldigt')"
                 @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenUnentschuldigt')"
                 @blur="onBlur($event, schueler, 'fehlstundenUnentschuldigt')"
-              />
+              >
             </td>
             <td v-if="showLernbereiche">
               <input
+                :ref="(el) => setInputRef(el, idx, schueler, 'lernbereichArbeitslehre')"
                 class="input note"
                 :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichArbeitslehre')), edited: hasChange(schueler, 'lernbereichArbeitslehre'), schlecht: isSchlechteNote(getCurrentValue(schueler, 'lernbereichArbeitslehre')) }"
                 type="text"
                 maxlength="2"
                 :value="getCurrentValue(schueler, 'lernbereichArbeitslehre')"
-                :ref="(el) => setInputRef(el, idx, schueler, 'lernbereichArbeitslehre')"
                 @input="onLernbereichInput($event, schueler, idx, 'lernbereichArbeitslehre')"
                 @keydown="onFieldKeydown($event, schueler, idx, 'lernbereichArbeitslehre')"
                 @blur="onBlur($event, schueler, 'lernbereichArbeitslehre')"
-              />
+              >
             </td>
             <td v-if="showLernbereiche">
               <input
+                :ref="(el) => setInputRef(el, idx, schueler, 'lernbereichNaturwissenschaft')"
                 class="input note"
                 :class="{ invalid: invalidIds.has(invalidKey(schueler.id, 'lernbereichNaturwissenschaft')), edited: hasChange(schueler, 'lernbereichNaturwissenschaft'), schlecht: isSchlechteNote(getCurrentValue(schueler, 'lernbereichNaturwissenschaft')) }"
                 type="text"
                 maxlength="2"
                 :value="getCurrentValue(schueler, 'lernbereichNaturwissenschaft')"
-                :ref="(el) => setInputRef(el, idx, schueler, 'lernbereichNaturwissenschaft')"
                 @input="onLernbereichInput($event, schueler, idx, 'lernbereichNaturwissenschaft')"
                 @keydown="onFieldKeydown($event, schueler, idx, 'lernbereichNaturwissenschaft')"
                 @blur="onBlur($event, schueler, 'lernbereichNaturwissenschaft')"
-              />
+              >
             </td>
             <td>
               <input
+                :ref="(el) => setInputRef(el, idx, schueler, 'asv')"
                 class="input text"
                 :class="{ edited: hasChange(schueler, 'asv') }"
                 type="text"
                 :value="getCurrentValue(schueler, 'asv')"
-                :ref="(el) => setInputRef(el, idx, schueler, 'asv')"
                 @dblclick="openTextDialog(schueler, idx, 'asv')"
                 @input="onInput($event, schueler, 'asv')"
                 @keydown="onFieldKeydown($event, schueler, idx, 'asv')"
                 @blur="onBlur($event, schueler, 'asv')"
-              />
+              >
             </td>
             <td>
               <input
+                :ref="(el) => setInputRef(el, idx, schueler, 'aue')"
                 class="input text"
                 :class="{ edited: hasChange(schueler, 'aue') }"
                 type="text"
                 :value="getCurrentValue(schueler, 'aue')"
-                :ref="(el) => setInputRef(el, idx, schueler, 'aue')"
                 @dblclick="openTextDialog(schueler, idx, 'aue')"
                 @input="onInput($event, schueler, 'aue')"
                 @keydown="onFieldKeydown($event, schueler, idx, 'aue')"
                 @blur="onBlur($event, schueler, 'aue')"
-              />
+              >
             </td>
             <td>
               <input
+                :ref="(el) => setInputRef(el, idx, schueler, 'zeugnisbemerkung')"
                 class="input text"
                 :class="{ edited: hasChange(schueler, 'zeugnisbemerkung') }"
                 type="text"
                 :value="getCurrentValue(schueler, 'zeugnisbemerkung')"
-                :ref="(el) => setInputRef(el, idx, schueler, 'zeugnisbemerkung')"
                 @dblclick="openTextDialog(schueler, idx, 'zeugnisbemerkung')"
                 @input="onInput($event, schueler, 'zeugnisbemerkung')"
                 @keydown="onFieldKeydown($event, schueler, idx, 'zeugnisbemerkung')"
                 @blur="onBlur($event, schueler, 'zeugnisbemerkung')"
-              />
+              >
             </td>
           </tr>
         </tbody>

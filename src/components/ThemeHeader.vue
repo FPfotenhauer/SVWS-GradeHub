@@ -56,27 +56,68 @@ async function confirmLogout(): Promise<void> {
 <template>
   <header class="app-header">
     <div class="theme-row">
-      <label class="theme-control" for="theme-select">
+      <label
+        class="theme-control"
+        for="theme-select"
+      >
         Theme
       </label>
-      <select id="theme-select" :value="themePreference" @change="onThemeChange">
-        <option value="system">System</option>
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
+      <select
+        id="theme-select"
+        :value="themePreference"
+        @change="onThemeChange"
+      >
+        <option value="system">
+          System
+        </option>
+        <option value="light">
+          Light
+        </option>
+        <option value="dark">
+          Dark
+        </option>
       </select>
     </div>
 
-    <button v-if="showLogout" class="logout-button" type="button" @click="logout">
+    <button
+      v-if="showLogout"
+      class="logout-button"
+      type="button"
+      @click="logout"
+    >
       Logout
     </button>
 
-    <div v-if="showLogoutWarning" class="modal-backdrop" @click.self="closeLogoutWarning">
-      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="logout-modal-title">
-        <h2 id="logout-modal-title">Ungespeicherte Änderungen</h2>
+    <div
+      v-if="showLogoutWarning"
+      class="modal-backdrop"
+      @click.self="closeLogoutWarning"
+    >
+      <section
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="logout-modal-title"
+      >
+        <h2 id="logout-modal-title">
+          Ungespeicherte Änderungen
+        </h2>
         <p>Es gibt ungespeicherte Änderungen. Wirklich ausloggen und Änderungen verwerfen?</p>
         <div class="modal-actions">
-          <button class="modal-btn secondary" type="button" @click="closeLogoutWarning">Abbrechen</button>
-          <button class="modal-btn danger" type="button" @click="confirmLogout">Logout</button>
+          <button
+            class="modal-btn secondary"
+            type="button"
+            @click="closeLogoutWarning"
+          >
+            Abbrechen
+          </button>
+          <button
+            class="modal-btn danger"
+            type="button"
+            @click="confirmLogout"
+          >
+            Logout
+          </button>
         </div>
       </section>
     </div>

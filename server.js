@@ -29,7 +29,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.post('/api/mail/test', async (req, res) => {
-  const { host, port, user, password, tls } = req.body
+  const { host, port, user, password } = req.body
 
   if (!host) {
     return res.status(400).send('SMTP-Host fehlt.')

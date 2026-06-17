@@ -7,7 +7,7 @@ import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
 import type { LeistungsFeld } from '@/types/changes'
-import type { EnmFloskelgruppe, EnmLeistungsdaten, EnmSchueler, EnmTeilleistungsart } from '@/types/enm'
+import type { EnmLeistungsdaten, EnmSchueler, EnmTeilleistungsart } from '@/types/enm'
 
 const route = useRoute()
 const router = useRouter()
@@ -847,15 +847,25 @@ function goSave(): void {
 
 <template>
   <main class="noteneingabe">
-
     <!-- ── Sticky Header ───────────────────────────────────────────────── -->
     <header class="noten-header">
-      <button class="btn-save" type="button" @click="goBack">Lerngruppen</button>
+      <button
+        class="btn-save"
+        type="button"
+        @click="goBack"
+      >
+        Lerngruppen
+      </button>
 
       <div class="noten-header-info">
         <span class="fach-badge">{{ fachKuerzel }}</span>
-        <h1 class="noten-titel">{{ lerngruppe?.bezeichnung ?? 'Unbekannte Lerngruppe' }}</h1>
-        <span v-if="fachBezeichnung" class="fach-bezeichnung">{{ fachBezeichnung }}</span>
+        <h1 class="noten-titel">
+          {{ lerngruppe?.bezeichnung ?? 'Unbekannte Lerngruppe' }}
+        </h1>
+        <span
+          v-if="fachBezeichnung"
+          class="fach-bezeichnung"
+        >{{ fachBezeichnung }}</span>
         <button
           class="btn-toggle"
           :class="{ 'btn-toggle-active': showFehlstunden }"
@@ -863,9 +873,26 @@ function goSave(): void {
           :title="showFehlstunden ? 'Fehlstunden ausblenden' : 'Fehlstunden einblenden'"
           @click="showFehlstunden = !showFehlstunden"
         >
-          <svg class="toggle-icon" viewBox="0 0 36 20" width="28" height="16" aria-hidden="true">
-            <rect x="0.75" y="0.75" width="34.5" height="18.5" rx="9.25" />
-            <circle class="toggle-knob" cx="10" cy="10" r="7" />
+          <svg
+            class="toggle-icon"
+            viewBox="0 0 36 20"
+            width="28"
+            height="16"
+            aria-hidden="true"
+          >
+            <rect
+              x="0.75"
+              y="0.75"
+              width="34.5"
+              height="18.5"
+              rx="9.25"
+            />
+            <circle
+              class="toggle-knob"
+              cx="10"
+              cy="10"
+              r="7"
+            />
           </svg>
           Fehlstunden
         </button>
@@ -877,9 +904,26 @@ function goSave(): void {
           :title="showTeilleistungen ? 'Teilleistungen ausblenden' : 'Teilleistungen einblenden'"
           @click="showTeilleistungen = !showTeilleistungen"
         >
-          <svg class="toggle-icon" viewBox="0 0 36 20" width="28" height="16" aria-hidden="true">
-            <rect x="0.75" y="0.75" width="34.5" height="18.5" rx="9.25" />
-            <circle class="toggle-knob" cx="10" cy="10" r="7" />
+          <svg
+            class="toggle-icon"
+            viewBox="0 0 36 20"
+            width="28"
+            height="16"
+            aria-hidden="true"
+          >
+            <rect
+              x="0.75"
+              y="0.75"
+              width="34.5"
+              height="18.5"
+              rx="9.25"
+            />
+            <circle
+              class="toggle-knob"
+              cx="10"
+              cy="10"
+              r="7"
+            />
           </svg>
           Teilleistungen
         </button>
@@ -887,7 +931,10 @@ function goSave(): void {
 
       <div class="noten-stats">
         <span class="stat">{{ schuelerListe.length }} SuS</span>
-        <span v-if="aenderungsCount > 0" class="stat stat-geaendert">
+        <span
+          v-if="aenderungsCount > 0"
+          class="stat stat-geaendert"
+        >
           {{ aenderungsCount }} geändert
         </span>
         <button
@@ -902,280 +949,326 @@ function goSave(): void {
     </header>
 
     <!-- ── Fallback: Lerngruppe nicht gefunden ─────────────────────────── -->
-    <div v-if="!lerngruppe" class="kein-inhalt">
+    <div
+      v-if="!lerngruppe"
+      class="kein-inhalt"
+    >
       <p>Lerngruppe nicht gefunden.</p>
-      <button type="button" @click="goBack">Zurück zur Übersicht</button>
+      <button
+        type="button"
+        @click="goBack"
+      >
+        Zurück zur Übersicht
+      </button>
     </div>
 
     <!-- ── Notentabelle ────────────────────────────────────────────────── -->
-    <div v-else class="tabelle-section">
-      <div class="tabelle-gap" aria-hidden="true" />
+    <div
+      v-else
+      class="tabelle-section"
+    >
+      <div
+        class="tabelle-gap"
+        aria-hidden="true"
+      />
 
       <div class="tabelle-wrapper">
         <table class="notentabelle">
-        <colgroup v-if="!showTeilleistungen">
-          <col :style="{ width: `${columnWidths.nr}px` }" />
-          <col :style="{ width: `${columnWidths.name}px` }" />
-          <col :style="{ width: `${columnWidths.klasse}px` }" />
-          <col v-if="showFehlstunden" :style="{ width: `${columnWidths.fsf}px` }" />
-          <col v-if="showFehlstunden" :style="{ width: `${columnWidths.fsu}px` }" />
-          <col :style="{ width: `${columnWidths.quartal}px` }" />
-          <col :style="{ width: `${columnWidths.note}px` }" />
-          <col />
-        </colgroup>
-        <colgroup v-else>
-          <col :style="{ width: `${columnWidths.nr}px` }" />
-          <col :style="{ width: `${columnWidths.name}px` }" />
-          <col :style="{ width: `${columnWidths.klasse}px` }" />
-          <col :style="{ width: `${columnWidths.quartal}px` }" />
-          <col :style="{ width: `${columnWidths.note}px` }" />
-          <col v-for="art in teilleistungsartenInLerngruppe" :key="art.id" :style="{ width: `${getTlColumnWidth(art.id)}px` }" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th class="col-nr is-resizable">
-              <span>#</span>
-              <button
-                class="col-resizer"
-                type="button"
-                aria-label="Spalte Nummer verbreitern oder verschmälern"
-                @pointerdown="startResize('nr', $event)"
-              />
-            </th>
-            <th class="col-name is-resizable">
-              <span>Name</span>
-              <button
-                class="col-resizer"
-                type="button"
-                aria-label="Spalte Name verbreitern oder verschmälern"
-                @pointerdown="startResize('name', $event)"
-              />
-            </th>
-            <th class="col-klasse is-resizable">
-              <span>Klasse</span>
-              <button
-                class="col-resizer"
-                type="button"
-                aria-label="Spalte Klasse verbreitern oder verschmälern"
-                @pointerdown="startResize('klasse', $event)"
-              />
-            </th>
-            <template v-if="!showTeilleistungen">
-              <th v-if="showFehlstunden" class="col-fsf is-resizable">
-                <span>FSF</span>
+          <colgroup v-if="!showTeilleistungen">
+            <col :style="{ width: `${columnWidths.nr}px` }">
+            <col :style="{ width: `${columnWidths.name}px` }">
+            <col :style="{ width: `${columnWidths.klasse}px` }">
+            <col
+              v-if="showFehlstunden"
+              :style="{ width: `${columnWidths.fsf}px` }"
+            >
+            <col
+              v-if="showFehlstunden"
+              :style="{ width: `${columnWidths.fsu}px` }"
+            >
+            <col :style="{ width: `${columnWidths.quartal}px` }">
+            <col :style="{ width: `${columnWidths.note}px` }">
+            <col>
+          </colgroup>
+          <colgroup v-else>
+            <col :style="{ width: `${columnWidths.nr}px` }">
+            <col :style="{ width: `${columnWidths.name}px` }">
+            <col :style="{ width: `${columnWidths.klasse}px` }">
+            <col :style="{ width: `${columnWidths.quartal}px` }">
+            <col :style="{ width: `${columnWidths.note}px` }">
+            <col
+              v-for="art in teilleistungsartenInLerngruppe"
+              :key="art.id"
+              :style="{ width: `${getTlColumnWidth(art.id)}px` }"
+            >
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="col-nr is-resizable">
+                <span>#</span>
                 <button
                   class="col-resizer"
                   type="button"
-                  aria-label="Spalte FSF verbreitern oder verschmälern"
-                  @pointerdown="startResize('fsf', $event)"
+                  aria-label="Spalte Nummer verbreitern oder verschmälern"
+                  @pointerdown="startResize('nr', $event)"
                 />
               </th>
-              <th v-if="showFehlstunden" class="col-fsu is-resizable">
-                <span>FSU</span>
+              <th class="col-name is-resizable">
+                <span>Name</span>
                 <button
                   class="col-resizer"
                   type="button"
-                  aria-label="Spalte FSU verbreitern oder verschmälern"
-                  @pointerdown="startResize('fsu', $event)"
+                  aria-label="Spalte Name verbreitern oder verschmälern"
+                  @pointerdown="startResize('name', $event)"
                 />
               </th>
-            </template>
-            <th class="col-quartal is-resizable">
-              <span>Quartal</span>
-              <button
-                class="col-resizer"
-                type="button"
-                aria-label="Spalte Quartal verbreitern oder verschmälern"
-                @pointerdown="startResize('quartal', $event)"
-              />
-            </th>
-            <th class="col-note is-resizable">
-              <span>Note</span>
-              <button
-                class="col-resizer"
-                type="button"
-                aria-label="Spalte Note verbreitern oder verschmälern"
-                @pointerdown="startResize('note', $event)"
-              />
-            </th>
-            <th v-if="!showTeilleistungen" class="col-bemerkung">
-              <span>Fachbezogene Bemerkung</span>
-            </th>
-            <template v-if="showTeilleistungen">
+              <th class="col-klasse is-resizable">
+                <span>Klasse</span>
+                <button
+                  class="col-resizer"
+                  type="button"
+                  aria-label="Spalte Klasse verbreitern oder verschmälern"
+                  @pointerdown="startResize('klasse', $event)"
+                />
+              </th>
+              <template v-if="!showTeilleistungen">
+                <th
+                  v-if="showFehlstunden"
+                  class="col-fsf is-resizable"
+                >
+                  <span>FSF</span>
+                  <button
+                    class="col-resizer"
+                    type="button"
+                    aria-label="Spalte FSF verbreitern oder verschmälern"
+                    @pointerdown="startResize('fsf', $event)"
+                  />
+                </th>
+                <th
+                  v-if="showFehlstunden"
+                  class="col-fsu is-resizable"
+                >
+                  <span>FSU</span>
+                  <button
+                    class="col-resizer"
+                    type="button"
+                    aria-label="Spalte FSU verbreitern oder verschmälern"
+                    @pointerdown="startResize('fsu', $event)"
+                  />
+                </th>
+              </template>
+              <th class="col-quartal is-resizable">
+                <span>Quartal</span>
+                <button
+                  class="col-resizer"
+                  type="button"
+                  aria-label="Spalte Quartal verbreitern oder verschmälern"
+                  @pointerdown="startResize('quartal', $event)"
+                />
+              </th>
+              <th class="col-note is-resizable">
+                <span>Note</span>
+                <button
+                  class="col-resizer"
+                  type="button"
+                  aria-label="Spalte Note verbreitern oder verschmälern"
+                  @pointerdown="startResize('note', $event)"
+                />
+              </th>
               <th
-                v-for="art in teilleistungsartenInLerngruppe"
-                :key="art.id"
-                class="col-teilleistung is-resizable"
+                v-if="!showTeilleistungen"
+                class="col-bemerkung"
               >
-                <span>{{ art.bezeichnung }}</span>
-                <button
-                  class="col-resizer"
-                  type="button"
-                  :aria-label="`Spalte ${art.bezeichnung} verbreitern oder verschmälern`"
-                  @pointerdown="startResizeTl(art.id, $event)"
-                />
+                <span>Fachbezogene Bemerkung</span>
               </th>
-            </template>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="(schueler, idx) in schuelerListe"
-            :key="schueler.id"
-            :class="{
-              'zeile-geaendert': hasAnyRowChange(schueler),
-              'zeile-focus': focusedRow === idx,
-            }"
-            @click="onRowClick($event, idx)"
-          >
-            <td class="col-nr">{{ idx + 1 }}</td>
-            <td class="col-name">
-              <span class="name-nachname">{{ schueler.nachname }}</span>,&nbsp;<span
-                class="name-vorname"
-              >{{ schueler.vorname }}</span>
-            </td>
-            <td class="col-klasse">{{ klassenById.get(schueler.klasseID) ?? '' }}</td>
-            <template v-if="!showTeilleistungen">
-              <td v-if="showFehlstunden" class="col-fsf">
-                <input
-                  class="absence-input"
-                  :class="{
-                    'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenFach')),
-                    'note-geaendert': hasChange(schueler, 'fehlstundenFach'),
-                  }"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="off"
-                  autocorrect="off"
-                  spellcheck="false"
-                  :placeholder="originalFieldValue(schueler, 'fehlstundenFach')"
-                  :ref="(el) => setFehlstundenFachInputRef(el, idx)"
-                  @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenFach')"
-                  @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenFach')"
-                  @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenFach')"
-                  @focus="focusedRow = idx"
-                />
+              <template v-if="showTeilleistungen">
+                <th
+                  v-for="art in teilleistungsartenInLerngruppe"
+                  :key="art.id"
+                  class="col-teilleistung is-resizable"
+                >
+                  <span>{{ art.bezeichnung }}</span>
+                  <button
+                    class="col-resizer"
+                    type="button"
+                    :aria-label="`Spalte ${art.bezeichnung} verbreitern oder verschmälern`"
+                    @pointerdown="startResizeTl(art.id, $event)"
+                  />
+                </th>
+              </template>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="(schueler, idx) in schuelerListe"
+              :key="schueler.id"
+              :class="{
+                'zeile-geaendert': hasAnyRowChange(schueler),
+                'zeile-focus': focusedRow === idx,
+              }"
+              @click="onRowClick($event, idx)"
+            >
+              <td class="col-nr">
+                {{ idx + 1 }}
               </td>
-              <td v-if="showFehlstunden" class="col-fsu">
-                <input
-                  class="absence-input"
-                  :class="{
-                    'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'fehlstundenUnentschuldigtFach')),
-                    'note-geaendert': hasChange(schueler, 'fehlstundenUnentschuldigtFach'),
-                  }"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="off"
-                  autocorrect="off"
-                  spellcheck="false"
-                  :placeholder="originalFieldValue(schueler, 'fehlstundenUnentschuldigtFach')"
-                  :ref="(el) => setFehlstundenUnentschuldigtFachInputRef(el, idx)"
-                  @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
-                  @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
-                  @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
-                  @focus="focusedRow = idx"
-                />
+              <td class="col-name">
+                <span class="name-nachname">{{ schueler.nachname }}</span>,&nbsp;<span
+                  class="name-vorname"
+                >{{ schueler.vorname }}</span>
               </td>
-            </template>
-            <td class="col-quartal">
-              <input
-                class="note-input"
-                :class="{
-                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'noteQuartal')),
-                  'note-geaendert': hasChange(schueler, 'noteQuartal'),
-                  'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, 'noteQuartal')) ?? ''),
-                }"
-                type="text"
-                maxlength="2"
-                autocomplete="off"
-                autocorrect="off"
-                spellcheck="false"
-                :placeholder="originalFieldValue(schueler, 'noteQuartal')"
-                :ref="(el) => setQuartalInputRef(el, idx)"
-                @input="onQuartalInput($event, schueler, idx)"
-                @keydown="onFieldKeydown($event, schueler, idx, 'noteQuartal')"
-                @blur="onQuartalBlur($event, schueler, idx)"
-                @focus="focusedRow = idx"
-              />
-            </td>
-            <td class="col-note">
-              <input
-                class="note-input"
-                :class="{
-                  'note-invalid':   invalidIds.has(invalidKey(schueler.id, 'note')),
-                  'note-geaendert': hasChange(schueler, 'note'),
-                  'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, 'note')) ?? ''),
-                }"
-                type="text"
-                maxlength="2"
-                autocomplete="off"
-                autocorrect="off"
-                spellcheck="false"
-                :placeholder="originalNote(schueler)"
-                :ref="(el) => setNoteInputRef(el, idx)"
-                @input="onNoteInput($event, schueler, idx)"
-                @keydown="onFieldKeydown($event, schueler, idx, 'note')"
-                @blur="onNoteBlur($event, schueler, idx)"
-                @focus="focusedRow = idx"
-              />
-            </td>
-            <template v-if="showTeilleistungen">
-              <td
-                v-for="(art, ai) in teilleistungsartenInLerngruppe"
-                :key="art.id"
-                class="col-teilleistung"
-              >
+              <td class="col-klasse">
+                {{ klassenById.get(schueler.klasseID) ?? '' }}
+              </td>
+              <template v-if="!showTeilleistungen">
+                <td
+                  v-if="showFehlstunden"
+                  class="col-fsf"
+                >
+                  <input
+                    :ref="(el) => setFehlstundenFachInputRef(el, idx)"
+                    class="absence-input"
+                    :class="{
+                      'note-invalid': invalidIds.has(invalidKey(schueler.id, 'fehlstundenFach')),
+                      'note-geaendert': hasChange(schueler, 'fehlstundenFach'),
+                    }"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    :placeholder="originalFieldValue(schueler, 'fehlstundenFach')"
+                    @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenFach')"
+                    @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenFach')"
+                    @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenFach')"
+                    @focus="focusedRow = idx"
+                  >
+                </td>
+                <td
+                  v-if="showFehlstunden"
+                  class="col-fsu"
+                >
+                  <input
+                    :ref="(el) => setFehlstundenUnentschuldigtFachInputRef(el, idx)"
+                    class="absence-input"
+                    :class="{
+                      'note-invalid': invalidIds.has(invalidKey(schueler.id, 'fehlstundenUnentschuldigtFach')),
+                      'note-geaendert': hasChange(schueler, 'fehlstundenUnentschuldigtFach'),
+                    }"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    :placeholder="originalFieldValue(schueler, 'fehlstundenUnentschuldigtFach')"
+                    @input="onFehlstundenInput($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                    @keydown="onFieldKeydown($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                    @blur="onFehlstundenBlur($event, schueler, idx, 'fehlstundenUnentschuldigtFach')"
+                    @focus="focusedRow = idx"
+                  >
+                </td>
+              </template>
+              <td class="col-quartal">
                 <input
+                  :ref="(el) => setQuartalInputRef(el, idx)"
                   class="note-input"
                   :class="{
-                    'note-invalid':   invalidIds.has(invalidKey(schueler.id, `teilleistung:${art.id}`)),
-                    'note-geaendert': hasChange(schueler, `teilleistung:${art.id}`),
-                    'note-schlecht':  isSchlechteNote(editValues.get(editKey(schueler.id, `teilleistung:${art.id}`)) ?? ''),
+                    'note-invalid': invalidIds.has(invalidKey(schueler.id, 'noteQuartal')),
+                    'note-geaendert': hasChange(schueler, 'noteQuartal'),
+                    'note-schlecht': isSchlechteNote(editValues.get(editKey(schueler.id, 'noteQuartal')) ?? ''),
                   }"
                   type="text"
                   maxlength="2"
                   autocomplete="off"
                   autocorrect="off"
                   spellcheck="false"
-                  :placeholder="originalFieldValue(schueler, `teilleistung:${art.id}`)"
-                  :ref="(el) => setTeilleistungInputRef(el, idx, ai)"
-                  @input="onTeilleistungInput($event, schueler, idx, ai, art.id)"
-                  @keydown="onTeilleistungKeydown($event, schueler, idx, ai, art.id)"
-                  @blur="onTeilleistungBlur($event, schueler, idx, art.id)"
+                  :placeholder="originalFieldValue(schueler, 'noteQuartal')"
+                  @input="onQuartalInput($event, schueler, idx)"
+                  @keydown="onFieldKeydown($event, schueler, idx, 'noteQuartal')"
+                  @blur="onQuartalBlur($event, schueler, idx)"
                   @focus="focusedRow = idx"
-                />
+                >
               </td>
-            </template>
-            <td v-if="!showTeilleistungen" class="col-bemerkung">
-              <div class="bemerkung-field">
+              <td class="col-note">
                 <input
-                  class="bemerkung-input"
+                  :ref="(el) => setNoteInputRef(el, idx)"
+                  class="note-input"
                   :class="{
-                    'note-geaendert': hasChange(schueler, 'fachbezogeneBemerkungen'),
+                    'note-invalid': invalidIds.has(invalidKey(schueler.id, 'note')),
+                    'note-geaendert': hasChange(schueler, 'note'),
+                    'note-schlecht': isSchlechteNote(editValues.get(editKey(schueler.id, 'note')) ?? ''),
                   }"
                   type="text"
+                  maxlength="2"
                   autocomplete="off"
                   autocorrect="off"
                   spellcheck="false"
-                  :placeholder="originalFieldValue(schueler, 'fachbezogeneBemerkungen')"
-                  :ref="(el) => setBemerkungInputRef(el, idx)"
-                  @input="onBemerkungInput($event, schueler, idx)"
-                  @keydown="onFieldKeydown($event, schueler, idx, 'fachbezogeneBemerkungen')"
-                  @blur="onBemerkungBlur($event, schueler, idx)"
+                  :placeholder="originalNote(schueler)"
+                  @input="onNoteInput($event, schueler, idx)"
+                  @keydown="onFieldKeydown($event, schueler, idx, 'note')"
+                  @blur="onNoteBlur($event, schueler, idx)"
                   @focus="focusedRow = idx"
-                  @dblclick="openFloskelDialog(schueler, idx)"
-                />
-                <button
-                  class="bemerkung-picker-button"
-                  type="button"
-                  @click="openFloskelDialog(schueler, idx)"
                 >
-                  Floskeln
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
+              </td>
+              <template v-if="showTeilleistungen">
+                <td
+                  v-for="(art, ai) in teilleistungsartenInLerngruppe"
+                  :key="art.id"
+                  class="col-teilleistung"
+                >
+                  <input
+                    :ref="(el) => setTeilleistungInputRef(el, idx, ai)"
+                    class="note-input"
+                    :class="{
+                      'note-invalid': invalidIds.has(invalidKey(schueler.id, `teilleistung:${art.id}`)),
+                      'note-geaendert': hasChange(schueler, `teilleistung:${art.id}`),
+                      'note-schlecht': isSchlechteNote(editValues.get(editKey(schueler.id, `teilleistung:${art.id}`)) ?? ''),
+                    }"
+                    type="text"
+                    maxlength="2"
+                    autocomplete="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    :placeholder="originalFieldValue(schueler, `teilleistung:${art.id}`)"
+                    @input="onTeilleistungInput($event, schueler, idx, ai, art.id)"
+                    @keydown="onTeilleistungKeydown($event, schueler, idx, ai, art.id)"
+                    @blur="onTeilleistungBlur($event, schueler, idx, art.id)"
+                    @focus="focusedRow = idx"
+                  >
+                </td>
+              </template>
+              <td
+                v-if="!showTeilleistungen"
+                class="col-bemerkung"
+              >
+                <div class="bemerkung-field">
+                  <input
+                    :ref="(el) => setBemerkungInputRef(el, idx)"
+                    class="bemerkung-input"
+                    :class="{
+                      'note-geaendert': hasChange(schueler, 'fachbezogeneBemerkungen'),
+                    }"
+                    type="text"
+                    autocomplete="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    :placeholder="originalFieldValue(schueler, 'fachbezogeneBemerkungen')"
+                    @input="onBemerkungInput($event, schueler, idx)"
+                    @keydown="onFieldKeydown($event, schueler, idx, 'fachbezogeneBemerkungen')"
+                    @blur="onBemerkungBlur($event, schueler, idx)"
+                    @focus="focusedRow = idx"
+                    @dblclick="openFloskelDialog(schueler, idx)"
+                  >
+                  <button
+                    class="bemerkung-picker-button"
+                    type="button"
+                    @click="openFloskelDialog(schueler, idx)"
+                  >
+                    Floskeln
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
         </table>
 
         <!-- ── Tastatur-Hinweise ────────────────────────────────────────────── -->
@@ -1210,7 +1303,6 @@ function goSave(): void {
       @navigate-prev="navigateFloskelDialog('prev', $event)"
       @navigate-next="navigateFloskelDialog('next', $event)"
     />
-
   </main>
 </template>
 

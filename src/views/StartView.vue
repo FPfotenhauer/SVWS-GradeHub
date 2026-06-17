@@ -426,39 +426,84 @@ function oeffneAdmin(): void {
       <span class="app-version">v{{ appVersion }}</span>
     </div>
 
-    <section v-if="admintoolVisible" class="card">
-      <button class="card-toggle" type="button" @click="serverCardOpen = !serverCardOpen">
+    <section
+      v-if="admintoolVisible"
+      class="card"
+    >
+      <button
+        class="card-toggle"
+        type="button"
+        @click="serverCardOpen = !serverCardOpen"
+      >
         <h2>Vom SVWS-Server laden</h2>
         <span>{{ serverCardOpen ? 'Einklappen' : 'Ausklappen' }}</span>
       </button>
 
-      <div v-if="serverCardOpen" class="card-content">
+      <div
+        v-if="serverCardOpen"
+        class="card-content"
+      >
         <label>
           Basis-URL
-          <input v-model="baseUrl" type="url" placeholder="https://svws.schule.de" />
+          <input
+            v-model="baseUrl"
+            type="url"
+            placeholder="https://svws.schule.de"
+          >
         </label>
         <label>
           Schema
-          <input v-model="schema" type="text" placeholder="svwsdb" />
+          <input
+            v-model="schema"
+            type="text"
+            placeholder="svwsdb"
+          >
         </label>
         <label>
           Benutzername
-          <input v-model="username" type="text" autocomplete="username" />
+          <input
+            v-model="username"
+            type="text"
+            autocomplete="username"
+          >
         </label>
         <label>
           Passwort
-          <input v-model="password" type="password" autocomplete="current-password" />
+          <input
+            v-model="password"
+            type="password"
+            autocomplete="current-password"
+          >
         </label>
         <div class="button-row">
-          <button :disabled="isLoading" type="button" @click="ladeLehrerListe">Lehrerliste laden</button>
-          <button class="secondary" type="button" @click="oeffneAdmin">Adminbereich</button>
+          <button
+            :disabled="isLoading"
+            type="button"
+            @click="ladeLehrerListe"
+          >
+            Lehrerliste laden
+          </button>
+          <button
+            class="secondary"
+            type="button"
+            @click="oeffneAdmin"
+          >
+            Adminbereich
+          </button>
         </div>
 
         <label v-if="lehrerListe.length > 0">
           Lehrerkuerzel
           <select v-model.number="selectedLehrerId">
-            <option :value="null" disabled>Bitte waehlen</option>
-            <option v-for="lehrer in lehrerListe" :key="lehrer.id" :value="lehrer.id">
+            <option
+              :value="null"
+              disabled
+            >Bitte waehlen</option>
+            <option
+              v-for="lehrer in lehrerListe"
+              :key="lehrer.id"
+              :value="lehrer.id"
+            >
               {{ lehrer.kuerzel }}
             </option>
           </select>
@@ -476,29 +521,72 @@ function oeffneAdmin(): void {
     </section>
 
     <section class="card">
-      <button class="card-toggle" type="button" @click="fileCardOpen = !fileCardOpen">
+      <button
+        class="card-toggle"
+        type="button"
+        @click="fileCardOpen = !fileCardOpen"
+      >
         <h2>Aus Datei laden</h2>
         <span>{{ fileCardOpen ? 'Einklappen' : 'Ausklappen' }}</span>
       </button>
 
-      <div v-if="fileCardOpen" class="card-content">
-        <input :disabled="isLoading" type="file" accept=".json,.gz,.json.gz,.enc.json" @change="onDateiAusgewaehlt" />
-        <button :disabled="isLoading || !ausgewaehlteDatei" type="button" @click="ladeVonDatei">
+      <div
+        v-if="fileCardOpen"
+        class="card-content"
+      >
+        <input
+          :disabled="isLoading"
+          type="file"
+          accept=".json,.gz,.json.gz,.enc.json"
+          @change="onDateiAusgewaehlt"
+        >
+        <button
+          :disabled="isLoading || !ausgewaehlteDatei"
+          type="button"
+          @click="ladeVonDatei"
+        >
           Lehrerdatei laden
         </button>
-        <p class="help">Unterstützt werden ENM-JSON, gzip-komprimierte ENM-Dateien sowie verschlüsselte Dateien (.enc.json).</p>
+        <p class="help">
+          Unterstützt werden ENM-JSON, gzip-komprimierte ENM-Dateien sowie verschlüsselte Dateien (.enc.json).
+        </p>
       </div>
     </section>
 
-    <div v-if="entschluesselnModalOffen" class="modal-backdrop" @click.self="schliesseEntschluesselnModal">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="entschluesseln-modal-title">
+    <div
+      v-if="entschluesselnModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseEntschluesselnModal"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="entschluesseln-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="entschluesseln-modal-title">Verschlüsselte Datei laden</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="schliesseEntschluesselnModal">✕</button>
+          <h2 id="entschluesseln-modal-title">
+            Verschlüsselte Datei laden
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseEntschluesselnModal"
+          >
+            ✕
+          </button>
         </div>
         <div class="modal-body">
-          <p class="help">Bitte Kennwort eingeben, um die ausgewählte Datei zu entschlüsseln.</p>
-          <p v-if="entschluesselnFehler" class="error">{{ entschluesselnFehler }}</p>
+          <p class="help">
+            Bitte Kennwort eingeben, um die ausgewählte Datei zu entschlüsseln.
+          </p>
+          <p
+            v-if="entschluesselnFehler"
+            class="error"
+          >
+            {{ entschluesselnFehler }}
+          </p>
           <label for="entschluesseln-passwort">Kennwort</label>
           <input
             id="entschluesseln-passwort"
@@ -506,36 +594,95 @@ function oeffneAdmin(): void {
             type="password"
             autocomplete="current-password"
             placeholder="Notenpasswort"
-          />
+          >
         </div>
         <div class="modal-footer">
-          <button class="secondary" type="button" @click="schliesseEntschluesselnModal">Abbrechen</button>
-          <button :disabled="entschluesselnLaeuft" type="button" @click="ladeVerschluesselteDateiMitKennwort">
+          <button
+            class="secondary"
+            type="button"
+            @click="schliesseEntschluesselnModal"
+          >
+            Abbrechen
+          </button>
+          <button
+            :disabled="entschluesselnLaeuft"
+            type="button"
+            @click="ladeVerschluesselteDateiMitKennwort"
+          >
             {{ entschluesselnLaeuft ? 'Entschlüsseln…' : 'Entschlüsseln & laden' }}
           </button>
         </div>
       </div>
     </div>
 
-    <div v-if="datenschutzModalOffen" class="modal-backdrop" @click.self="datenschutzModalOffen = false">
-      <div class="modal modal--datenschutz" role="dialog" aria-modal="true" aria-labelledby="datenschutz-modal-title">
+    <div
+      v-if="datenschutzModalOffen"
+      class="modal-backdrop"
+      @click.self="datenschutzModalOffen = false"
+    >
+      <div
+        class="modal modal--datenschutz"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="datenschutz-modal-title"
+      >
         <div class="modal-header">
-          <h2 id="datenschutz-modal-title">Datenschutzhinweise</h2>
-          <button class="modal-close" type="button" aria-label="Schließen" @click="datenschutzModalOffen = false">✕</button>
+          <h2 id="datenschutz-modal-title">
+            Datenschutzhinweise
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="datenschutzModalOffen = false"
+          >
+            ✕
+          </button>
         </div>
-        <div class="modal-body modal-body--scroll" v-html="datenschutzHtml" />
+        <!-- eslint-disable vue/no-v-html -->
+        <div
+          class="modal-body modal-body--scroll"
+          v-html="datenschutzHtml"
+        />
+        <!-- eslint-enable vue/no-v-html -->
         <div class="modal-footer">
-          <button type="button" @click="datenschutzModalOffen = false">Schließen</button>
+          <button
+            type="button"
+            @click="datenschutzModalOffen = false"
+          >
+            Schließen
+          </button>
         </div>
       </div>
     </div>
 
-    <p v-if="statusMessage" class="status">{{ statusMessage }}</p>
-    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+    <p
+      v-if="statusMessage"
+      class="status"
+    >
+      {{ statusMessage }}
+    </p>
+    <p
+      v-if="errorMessage"
+      class="error"
+    >
+      {{ errorMessage }}
+    </p>
 
     <footer class="app-footer">
-      <a class="link-button" href="https://fpfotenhauer.github.io/SVWS-GradeHub/" target="_blank" rel="noopener noreferrer">Hilfe</a>
-      <button class="link-button" type="button" @click="datenschutzModalOffen = true">Datenschutzhinweise</button>
+      <a
+        class="link-button"
+        href="https://fpfotenhauer.github.io/SVWS-GradeHub/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >Hilfe</a>
+      <button
+        class="link-button"
+        type="button"
+        @click="datenschutzModalOffen = true"
+      >
+        Datenschutzhinweise
+      </button>
     </footer>
   </main>
 </template>

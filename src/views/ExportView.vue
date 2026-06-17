@@ -589,7 +589,10 @@ function goBack(): void {
   <main class="export-view">
     <h1>Speichern</h1>
 
-    <section class="card" v-if="isLoaded && enmDaten">
+    <section
+      v-if="isLoaded && enmDaten"
+      class="card"
+    >
       <p>
         Datenquelle:
         <strong>{{ dataSourceLabel }}</strong>
@@ -599,32 +602,59 @@ function goBack(): void {
         <strong>{{ changeCount }}</strong>
       </p>
 
-      <p v-if="isFileSource && sourceDisplayName" class="source-hint">
+      <p
+        v-if="isFileSource && sourceDisplayName"
+        class="source-hint"
+      >
         Quelle: {{ sourceDisplayName }}
       </p>
 
-      <p class="hint" v-if="effectiveDataSource === 'api'">
+      <p
+        v-if="effectiveDataSource === 'api'"
+        class="hint"
+      >
         Es wird ein Rückschreibe-Dialog für den SVWS-Server angeboten.
       </p>
-      <p class="hint" v-else-if="isEncryptedFileSource">
+      <p
+        v-else-if="isEncryptedFileSource"
+        class="hint"
+      >
         Es wird eine verschluesselte ENM-Datei gespeichert.
       </p>
-      <p class="hint" v-else-if="effectiveDataSource === 'file'">
+      <p
+        v-else-if="effectiveDataSource === 'file'"
+        class="hint"
+      >
         Es wird ein Dateispeicher-Dialog angeboten.
       </p>
-      <p class="hint" v-else>
+      <p
+        v-else
+        class="hint"
+      >
         Es wird ein Rückschreibe-Dialog für den SVWS-Server angeboten.
       </p>
 
-      <p v-if="isFileSource && supportsNativeSaveDialog" class="hint">
+      <p
+        v-if="isFileSource && supportsNativeSaveDialog"
+        class="hint"
+      >
         Beim Speichern wird der native Speicherdialog geoeffnet; dort kann eine bestehende Datei ausgewaehlt und ueberschrieben werden.
       </p>
-      <p v-else-if="isFileSource" class="hint">
+      <p
+        v-else-if="isFileSource"
+        class="hint"
+      >
         Dieser Browser/Modus unterstuetzt keinen nativen Speicherdialog. Beim Speichern wird die Datei stattdessen in den Download-Ordner geladen.
       </p>
 
       <div class="actions">
-        <button class="secondary" type="button" @click="goBack">Zurück</button>
+        <button
+          class="secondary"
+          type="button"
+          @click="goBack"
+        >
+          Zurück
+        </button>
         <button
           class="primary"
           type="button"
@@ -640,14 +670,25 @@ function goBack(): void {
       </div>
     </section>
 
-    <section v-if="isLoaded && enmDaten && changeSummary.length > 0" class="card change-card">
+    <section
+      v-if="isLoaded && enmDaten && changeSummary.length > 0"
+      class="card change-card"
+    >
       <div class="change-card-header">
         <h2>Änderungen</h2>
         <span>{{ changeSummary.length }} Einträge</span>
       </div>
 
-      <div class="change-list" role="list">
-        <article v-for="item in changeSummary" :key="item.key" class="change-item" role="listitem">
+      <div
+        class="change-list"
+        role="list"
+      >
+        <article
+          v-for="item in changeSummary"
+          :key="item.key"
+          class="change-item"
+          role="listitem"
+        >
           <div class="change-topline">
             <strong>{{ item.schueler }}</strong>
             <span>{{ item.kontext }}</span>
@@ -662,13 +703,32 @@ function goBack(): void {
       </div>
     </section>
 
-    <section v-else class="card">
+    <section
+      v-else
+      class="card"
+    >
       <p>Es sind keine ENM-Daten geladen.</p>
-      <button class="secondary" type="button" @click="goBack">Zurück</button>
+      <button
+        class="secondary"
+        type="button"
+        @click="goBack"
+      >
+        Zurück
+      </button>
     </section>
 
-    <p v-if="statusMessage" class="status">{{ statusMessage }}</p>
-    <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
+    <p
+      v-if="statusMessage"
+      class="status"
+    >
+      {{ statusMessage }}
+    </p>
+    <p
+      v-if="errorMessage"
+      class="error"
+    >
+      {{ errorMessage }}
+    </p>
   </main>
 </template>
 

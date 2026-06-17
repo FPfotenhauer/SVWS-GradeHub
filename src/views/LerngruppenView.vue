@@ -6,8 +6,6 @@ import { RouterLink, useRouter } from 'vue-router'
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 
-import type { EnmKlasse, EnmLerngruppe } from '@/types/enm'
-
 const router = useRouter()
 const enmStore = useENMStore()
 const changeStore = useChangeStore()
@@ -171,9 +169,16 @@ function goSave(): void {
         </button>
       </div>
     </div>
-    <p v-if="ownLehrerAnzeige" class="lehrer-info">Lehrkraft: {{ ownLehrerAnzeige }}</p>
+    <p
+      v-if="ownLehrerAnzeige"
+      class="lehrer-info"
+    >
+      Lehrkraft: {{ ownLehrerAnzeige }}
+    </p>
 
-    <p v-if="!enmStore.isLoaded">Es sind noch keine ENM-Daten geladen.</p>
+    <p v-if="!enmStore.isLoaded">
+      Es sind noch keine ENM-Daten geladen.
+    </p>
 
     <template v-else>
       <section class="bereich">
@@ -189,19 +194,26 @@ function goSave(): void {
               <strong>{{ gruppe.bezeichnung }}</strong>
               <span class="badge">{{ faecherById.get(gruppe.fachID)?.kuerzel ?? 'Fach' }}</span>
             </header>
-            <p class="meta">{{ faecherById.get(gruppe.fachID)?.bezeichnung ?? 'Fach unbekannt' }}</p>
+            <p class="meta">
+              {{ faecherById.get(gruppe.fachID)?.bezeichnung ?? 'Fach unbekannt' }}
+            </p>
             <p class="meta">
               Klasse: {{ gruppenMeta.get(gruppe.id)?.klassen || 'nicht zugeordnet' }}
             </p>
             <p class="meta">
               Jahrgang: {{ gruppenMeta.get(gruppe.id)?.jahrgaenge || 'nicht zugeordnet' }}
             </p>
-            <p class="meta">Wochenstunden: {{ gruppe.wochenstunden }}</p>
+            <p class="meta">
+              Wochenstunden: {{ gruppe.wochenstunden }}
+            </p>
           </RouterLink>
         </div>
       </section>
 
-      <section v-if="klassenleiterKlassen.length > 0" class="bereich">
+      <section
+        v-if="klassenleiterKlassen.length > 0"
+        class="bereich"
+      >
         <h2>Klassenleitung</h2>
         <p class="hinweis">
           {{ ownLehrerKuerzel || 'Lehrkraft' }} ist Klassenleitung in folgenden Klassen.
@@ -220,8 +232,12 @@ function goSave(): void {
                 {{ jahrgaengeById.get(klasse.idJahrgang) ?? 'Jahrgang' }}
               </span>
             </header>
-            <p class="meta">Schueler: {{ schuelerCountByKlasseId.get(klasse.id) ?? 0 }}</p>
-            <p class="meta">Klasse-ID: {{ klasse.id }}</p>
+            <p class="meta">
+              Schueler: {{ schuelerCountByKlasseId.get(klasse.id) ?? 0 }}
+            </p>
+            <p class="meta">
+              Klasse-ID: {{ klasse.id }}
+            </p>
           </RouterLink>
         </div>
       </section>

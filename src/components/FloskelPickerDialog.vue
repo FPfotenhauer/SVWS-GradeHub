@@ -357,14 +357,29 @@ function confirmNavigate(save: boolean): void {
 
 <template>
   <Teleport to="body">
-    <div v-if="open" class="floskel-overlay" @click.self="schliessen">
-      <section class="floskel-dialog" aria-modal="true" role="dialog">
+    <div
+      v-if="open"
+      class="floskel-overlay"
+      @click.self="schliessen"
+    >
+      <section
+        class="floskel-dialog"
+        aria-modal="true"
+        role="dialog"
+      >
         <header class="floskel-header">
           <div>
-            <p class="floskel-kicker">Textbausteine</p>
+            <p class="floskel-kicker">
+              Textbausteine
+            </p>
             <div class="floskel-title-row">
-              <h2 class="floskel-title">{{ title }}</h2>
-              <span v-if="schuelerInfo" class="floskel-schueler-info">{{ schuelerInfo }}</span>
+              <h2 class="floskel-title">
+                {{ title }}
+              </h2>
+              <span
+                v-if="schuelerInfo"
+                class="floskel-schueler-info"
+              >{{ schuelerInfo }}</span>
             </div>
             <p class="floskel-subtitle">
               Allgemeine Floskeln und passende Bereichs-Floskeln stehen gemeinsam zur Auswahl. Doppelklick fügt den Text ein.
@@ -382,10 +397,14 @@ function confirmNavigate(save: boolean): void {
               placeholder="Nach Kürzel oder Text suchen"
               autocomplete="off"
               spellcheck="false"
-            />
+            >
           </label>
 
-          <div class="floskel-groups" role="tablist" aria-label="Floskelgruppen">
+          <div
+            class="floskel-groups"
+            role="tablist"
+            aria-label="Floskelgruppen"
+          >
             <button
               class="floskel-chip"
               :class="{ 'is-active': aktiveGruppe === 'alle' }"
@@ -407,7 +426,10 @@ function confirmNavigate(save: boolean): void {
             </button>
           </div>
 
-          <label v-if="fachOptionen.length > 0" class="floskel-fachfilter floskel-fachfilter-wide">
+          <label
+            v-if="fachOptionen.length > 0"
+            class="floskel-fachfilter floskel-fachfilter-wide"
+          >
             <span>Fach</span>
             <select v-model="aktivesFach">
               <option value="alle">Alle Fächer</option>
@@ -421,7 +443,10 @@ function confirmNavigate(save: boolean): void {
             </select>
           </label>
 
-          <label v-if="niveauOptionen.length > 0" class="floskel-fachfilter floskel-fachfilter-narrow">
+          <label
+            v-if="niveauOptionen.length > 0"
+            class="floskel-fachfilter floskel-fachfilter-narrow"
+          >
             <span>Niveau</span>
             <select v-model="aktivesNiveau">
               <option value="alle">Alle</option>
@@ -452,12 +477,21 @@ function confirmNavigate(save: boolean): void {
 
         <div class="floskel-layout">
           <div class="floskel-list-column">
-            <p v-if="gefilterteFloskeln.length === 0" class="floskel-empty">
+            <p
+              v-if="gefilterteFloskeln.length === 0"
+              class="floskel-empty"
+            >
               Keine Floskeln passen zum aktuellen Filter.
             </p>
 
-            <ul v-else class="floskel-list">
-              <li v-for="item in gefilterteFloskeln" :key="item.id">
+            <ul
+              v-else
+              class="floskel-list"
+            >
+              <li
+                v-for="item in gefilterteFloskeln"
+                :key="item.id"
+              >
                 <article
                   class="floskel-card"
                   :class="{ 'is-selected': ausgewaehlteFloskel?.id === item.id }"
@@ -476,7 +510,9 @@ function confirmNavigate(save: boolean): void {
                       <span class="floskel-card-code">{{ item.floskel.kuerzel }}</span>
                     </span>
                   </div>
-                  <p class="floskel-card-text">{{ item.textGerendert }}</p>
+                  <p class="floskel-card-text">
+                    {{ item.textGerendert }}
+                  </p>
                 </article>
               </li>
             </ul>
@@ -492,7 +528,10 @@ function confirmNavigate(save: boolean): void {
               />
             </label>
 
-            <div v-if="ausgewaehlteFloskel" class="floskel-preview">
+            <div
+              v-if="ausgewaehlteFloskel"
+              class="floskel-preview"
+            >
               <div class="floskel-preview-meta">
                 <span>{{ ausgewaehlteFloskel.gruppeBezeichnung }}</span>
                 <strong>{{ ausgewaehlteFloskel.floskel.kuerzel }}</strong>
@@ -504,30 +543,99 @@ function confirmNavigate(save: boolean): void {
 
         <footer class="floskel-footer">
           <template v-if="navigatePending">
-            <p class="floskel-confirm-text">Text nicht übernommen — wie fortfahren?</p>
+            <p class="floskel-confirm-text">
+              Text nicht übernommen — wie fortfahren?
+            </p>
             <div class="floskel-action-buttons">
-              <button class="secondary" type="button" @click="navigatePending = null">Abbrechen</button>
-              <button class="secondary" type="button" @click="confirmNavigate(false)">Verwerfen &amp; weiter</button>
-              <button type="button" @click="confirmNavigate(true)">Übernehmen &amp; weiter</button>
+              <button
+                class="secondary"
+                type="button"
+                @click="navigatePending = null"
+              >
+                Abbrechen
+              </button>
+              <button
+                class="secondary"
+                type="button"
+                @click="confirmNavigate(false)"
+              >
+                Verwerfen &amp; weiter
+              </button>
+              <button
+                type="button"
+                @click="confirmNavigate(true)"
+              >
+                Übernehmen &amp; weiter
+              </button>
             </div>
           </template>
           <template v-else-if="closePending">
-            <p class="floskel-confirm-text">Text nicht übernommen — trotzdem schließen?</p>
+            <p class="floskel-confirm-text">
+              Text nicht übernommen — trotzdem schließen?
+            </p>
             <div class="floskel-action-buttons">
-              <button class="secondary" type="button" @click="closePending = false">Abbrechen</button>
-              <button class="secondary" type="button" @click="confirmSchliessen(false)">Verwerfen &amp; schließen</button>
-              <button type="button" @click="confirmSchliessen(true)">Übernehmen &amp; schließen</button>
+              <button
+                class="secondary"
+                type="button"
+                @click="closePending = false"
+              >
+                Abbrechen
+              </button>
+              <button
+                class="secondary"
+                type="button"
+                @click="confirmSchliessen(false)"
+              >
+                Verwerfen &amp; schließen
+              </button>
+              <button
+                type="button"
+                @click="confirmSchliessen(true)"
+              >
+                Übernehmen &amp; schließen
+              </button>
             </div>
           </template>
           <template v-else>
             <div class="floskel-nav-buttons">
-              <button class="secondary" type="button" :disabled="!hasPrev" @click="onNavigateClick('prev')">Vorheriger</button>
-              <button class="secondary" type="button" :disabled="!hasNext" @click="onNavigateClick('next')">Nächster</button>
+              <button
+                class="secondary"
+                type="button"
+                :disabled="!hasPrev"
+                @click="onNavigateClick('prev')"
+              >
+                Vorheriger
+              </button>
+              <button
+                class="secondary"
+                type="button"
+                :disabled="!hasNext"
+                @click="onNavigateClick('next')"
+              >
+                Nächster
+              </button>
             </div>
             <div class="floskel-action-buttons">
-              <button class="secondary" type="button" @click="verwerfen">Abbrechen</button>
-              <button type="button" @click="uebernehmen">Übernehmen</button>
-              <button class="secondary" type="button" @click="schliessen">Schließen</button>
+              <button
+                class="secondary"
+                type="button"
+                @click="verwerfen"
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                @click="uebernehmen"
+              >
+                Übernehmen
+              </button>
+              <button
+                class="secondary"
+                type="button"
+                @click="schliessen"
+              >
+                Schließen
+              </button>
             </div>
           </template>
         </footer>

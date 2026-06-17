@@ -1,7 +1,6 @@
 'use strict'
 
 const { app, BrowserWindow, session, Menu } = require('electron')
-const path = require('path')
 const { createServer: createNetServer } = require('net')
 
 function findFreePort(start = 3000) {
