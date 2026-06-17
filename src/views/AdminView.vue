@@ -30,6 +30,7 @@ function logout(): void {
   changeStore.reset()
   enmStore.reset()
   authStore.clear()
+  konfigKennwort.value = ''
   router.push('/')
 }
 
@@ -601,8 +602,8 @@ const speichernFehler = ref<string>('')
 const speichernLaeuft = ref<boolean>(false)
 
 function speichern(): void {
-  speichernKennwort.value = ''
-  speichernKennwortBestaetigung.value = ''
+  speichernKennwort.value = konfigKennwort.value
+  speichernKennwortBestaetigung.value = konfigKennwort.value
   speichernFehler.value = ''
   speichernModalOffen.value = true
 }
@@ -704,6 +705,7 @@ async function fuehreServerSpeichernDurch(): Promise<void> {
     }
     const encrypted = await aesVerschluesseln(JSON.stringify(daten, null, 2), speichernKennwort.value)
     await speichereKonfigurationAufServer(encrypted)
+    serverKonfigVorhanden.value = true
     speichernModalOffen.value = false
   } catch (error) {
     speichernFehler.value = error instanceof Error ? error.message : 'Speichern fehlgeschlagen.'
@@ -720,6 +722,7 @@ const ladenLaeuft = ref<boolean>(false)
 const ladenDateiName = ref<string>('')
 const ladenDateiText = ref<string>('')
 const serverKonfigVorhanden = ref<boolean>(false)
+const konfigKennwort = ref<string>('')
 
 function laden(): void {
   ladenKennwort.value = ''
@@ -805,6 +808,7 @@ async function fuehreLabenDurch(): Promise<void> {
       smtpFrom.value = daten.smtp.from
       smtpTls.value = daten.smtp.tls
     }
+    konfigKennwort.value = ladenKennwort.value
     ladenModalOffen.value = false
   } catch {
     ladenFehler.value = 'Entschlüsselung fehlgeschlagen. Falsches Kennwort oder beschädigte Datei.'
@@ -870,6 +874,7 @@ async function fuehreServerLabenDurch(): Promise<void> {
       smtpFrom.value = daten.smtp.from
       smtpTls.value = daten.smtp.tls
     }
+    konfigKennwort.value = ladenKennwort.value
     ladenModalOffen.value = false
   } catch (error) {
     ladenFehler.value = error instanceof Error ? error.message : 'Laden oder Entschlüsselung fehlgeschlagen.'
@@ -1761,7 +1766,7 @@ onUnmounted(() => {
             v-if="kannAnSVWSServerSenden"
             class="btn-generate btn-generate--aktiv"
             type="button"
-            :disabled="ladenLaeuft || ladenVomServerLaeuft"
+            :disabled="ladenLaeuft || ladenVomServerLaeuft || !serverKonfigVorhanden"
             @click="fuehreServerLabenDurch"
           >
             {{ ladenVomServerLaeuft ? 'Wird geladen…' : 'Vom Server laden' }}
