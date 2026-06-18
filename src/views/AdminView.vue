@@ -265,7 +265,7 @@ onUnmounted(() => {
             type="button"
             @click="generiereSchluessel"
           >
-            Schlüssel generieren
+            {{ oeffentlicherSchluesselPem ? 'Schlüssel anzeigen' : 'Schlüssel generieren' }}
           </button>
           <button
             class="btn-generate"
@@ -598,6 +598,7 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             placeholder="Mindestens 8 Zeichen"
+            @keydown.enter="speichernLaeuft || (kannAnSVWSServerSenden ? fuehreServerSpeichernDurch() : fuehreSpeichernDurch())"
           >
           <label
             class="modal-form-label"
@@ -610,6 +611,7 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             placeholder="Kennwort wiederholen"
+            @keydown.enter="speichernLaeuft || (kannAnSVWSServerSenden ? fuehreServerSpeichernDurch() : fuehreSpeichernDurch())"
           >
         </div>
         <div class="modal-footer">
@@ -711,6 +713,7 @@ onUnmounted(() => {
             type="password"
             autocomplete="current-password"
             placeholder="Kennwort eingeben"
+            @keydown.enter="(ladenLaeuft || ladenVomServerLaeuft) || (kannAnSVWSServerSenden && serverKonfigVorhanden ? fuehreServerLabenDurch() : fuehreLadenDurch())"
           >
         </div>
         <div class="modal-footer">
@@ -847,6 +850,7 @@ onUnmounted(() => {
             class="modal-input"
             type="text"
             placeholder="mail.schule.de"
+            @keydown.enter="speichereSmtpKonfiguration"
           >
           <label
             class="modal-form-label"
@@ -858,6 +862,7 @@ onUnmounted(() => {
             class="modal-input"
             type="number"
             placeholder="587"
+            @keydown.enter="speichereSmtpKonfiguration"
           >
           <label
             class="modal-form-label"
@@ -870,6 +875,7 @@ onUnmounted(() => {
             type="text"
             autocomplete="username"
             placeholder="noten@schule.de"
+            @keydown.enter="speichereSmtpKonfiguration"
           >
           <label
             class="modal-form-label"
@@ -881,6 +887,7 @@ onUnmounted(() => {
             class="modal-input"
             type="password"
             autocomplete="current-password"
+            @keydown.enter="speichereSmtpKonfiguration"
           >
           <label
             class="modal-form-label"
@@ -892,6 +899,7 @@ onUnmounted(() => {
             class="modal-input"
             type="email"
             placeholder="noten@schule.de"
+            @keydown.enter="speichereSmtpKonfiguration"
           >
           <label class="toggle-label">
             <input
