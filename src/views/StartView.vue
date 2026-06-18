@@ -84,6 +84,72 @@ type EncryptedZipPayload = {
 const datenschutzModalOffen = ref<boolean>(false)
 const datenschutzHtml = marked.parse(datenschutzMd) as string
 
+type ImpressumWindow = Window & { __IMPRESSUM_MARKDOWN__?: string }
+
+const impressumModalOffen = ref<boolean>(false)
+const impressumLaedt = ref<boolean>(false)
+const impressumInhalt = ref<string>('')
+const impressumHtml = ref<string>('')
+const impressumFehler = ref<string>('')
+
+async function ladeImpressumScript(): Promise<string> {
+  const existing = (window as ImpressumWindow).__IMPRESSUM_MARKDOWN__
+  if (existing != null) {
+    return existing
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    function ladeScript(src: string, beiFehler: () => void) {
+      const script = document.createElement('script')
+      script.src = src
+      script.async = true
+      script.onload = () => resolve()
+      script.onerror = beiFehler
+      document.head.appendChild(script)
+    }
+
+    const primaer = new URL('impressum.js', window.location.href).toString()
+    const fallback = new URL('impressum.example.js', window.location.href).toString()
+
+    ladeScript(primaer, () => {
+      ladeScript(fallback, () => {
+        reject(new Error(
+          'Weder "impressum.js" noch "impressum.example.js" wurden gefunden. ' +
+          'Bitte legen Sie die Datei "impressum.js" neben der index.html Ihres Servers ab.',
+        ))
+      })
+    })
+  })
+
+  const geladen = (window as ImpressumWindow).__IMPRESSUM_MARKDOWN__
+  if (geladen == null) {
+    throw new Error('Die Datei "impressum.js" enthält keinen Impressumstext.')
+  }
+  return geladen
+}
+
+async function oeffneImpressumModal(): Promise<void> {
+  impressumModalOffen.value = true
+  if (impressumLaedt.value || impressumInhalt.value) return
+
+  impressumLaedt.value = true
+  impressumFehler.value = ''
+
+  try {
+    impressumInhalt.value = await ladeImpressumScript()
+    impressumHtml.value = marked.parse(impressumInhalt.value) as string
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unbekannter Fehler'
+    impressumFehler.value = `Impressum konnte nicht geladen werden: ${message}`
+  } finally {
+    impressumLaedt.value = false
+  }
+}
+
+function schliesseImpressumModal(): void {
+  impressumModalOffen.value = false
+}
+
 const entschluesselnModalOffen = ref<boolean>(false)
 const entschluesselnKennwort = ref<string>('')
 const entschluesselnFehler = ref<string>('')
@@ -592,6 +658,60 @@ function oeffneAdmin(): void {
     </div>
 
     <div
+      v-if="impressumModalOffen"
+      class="modal-backdrop"
+      @click.self="schliesseImpressumModal"
+    >
+      <div
+        class="modal modal--datenschutz"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="impressum-modal-title"
+      >
+        <div class="modal-header">
+          <h2 id="impressum-modal-title">
+            Impressum
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="schliesseImpressumModal"
+          >
+            ✕
+          </button>
+        </div>
+        <p
+          v-if="impressumLaedt"
+          class="modal-body"
+        >
+          Impressum wird geladen…
+        </p>
+        <p
+          v-else-if="impressumFehler"
+          class="modal-body"
+        >
+          {{ impressumFehler }}
+        </p>
+        <!-- eslint-disable vue/no-v-html -->
+        <div
+          v-else
+          class="modal-body modal-body--scroll"
+          v-html="impressumHtml"
+        />
+        <!-- eslint-enable vue/no-v-html -->
+        <div class="modal-footer">
+          <button
+            type="button"
+            @click="schliesseImpressumModal"
+          >
+            Schließen
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
       v-if="datenschutzModalOffen"
       class="modal-backdrop"
       @click.self="datenschutzModalOffen = false"
@@ -652,6 +772,13 @@ function oeffneAdmin(): void {
         target="_blank"
         rel="noopener noreferrer"
       >Hilfe</a>
+      <button
+        class="link-button"
+        type="button"
+        @click="() => { void oeffneImpressumModal() }"
+      >
+        Impressum
+      </button>
       <button
         class="link-button"
         type="button"
