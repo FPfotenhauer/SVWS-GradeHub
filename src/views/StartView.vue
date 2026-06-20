@@ -768,7 +768,7 @@ function oeffneAdmin(): void {
     <footer class="app-footer">
       <a
         class="link-button"
-        href="https://fpfotenhauer.github.io/SVWS-GradeHub/"
+        href="https://doku.svws-nrw.de/svws_module/svws_gradehub/"
         target="_blank"
         rel="noopener noreferrer"
       >Hilfe</a>

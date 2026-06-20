@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useChangeStore } from '@/stores/changeStore'
 import { useENMStore } from '@/stores/enmStore'
 import { useUIStore } from '@/stores/uiStore'
+import type { ThemePreference } from '@/stores/uiStore'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -18,11 +19,15 @@ const showLogoutWarning = ref<boolean>(false)
 
 const showLogout = computed<boolean>(() => authStore.isConfigured || enmStore.isLoaded)
 
-function onThemeChange(event: Event): void {
-  const select = event.target as HTMLSelectElement
-  if (select.value === 'light' || select.value === 'dark' || select.value === 'system') {
-    uiStore.setThemePreference(select.value)
-  }
+const themeAriaLabel = computed<string>(() => {
+  if (themePreference.value === 'light') return 'Theme: Hell – klicken zum Wechseln'
+  if (themePreference.value === 'dark') return 'Theme: Dunkel – klicken zum Wechseln'
+  return 'Theme: System – klicken zum Wechseln'
+})
+
+function toggleTheme(): void {
+  const next: Record<ThemePreference, ThemePreference> = { system: 'light', light: 'dark', dark: 'system' }
+  uiStore.setThemePreference(next[themePreference.value])
 }
 
 async function performLogout(): Promise<void> {
@@ -50,34 +55,134 @@ async function confirmLogout(): Promise<void> {
   await performLogout()
 }
 
-// Naechster Schritt: Theme-Switch als Icon-Button-Variante optional anbieten.
 </script>
 
 <template>
   <header class="app-header">
-    <div class="theme-row">
-      <label
-        class="theme-control"
-        for="theme-select"
+    <button
+      class="theme-toggle"
+      type="button"
+      :aria-label="themeAriaLabel"
+      :title="themeAriaLabel"
+      @click="toggleTheme"
+    >
+      <svg
+        v-if="themePreference === 'light'"
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
       >
-        Theme
-      </label>
-      <select
-        id="theme-select"
-        :value="themePreference"
-        @change="onThemeChange"
+        <circle
+          cx="12"
+          cy="12"
+          r="5"
+        />
+        <line
+          x1="12"
+          y1="1"
+          x2="12"
+          y2="3"
+        />
+        <line
+          x1="12"
+          y1="21"
+          x2="12"
+          y2="23"
+        />
+        <line
+          x1="4.22"
+          y1="4.22"
+          x2="5.64"
+          y2="5.64"
+        />
+        <line
+          x1="18.36"
+          y1="18.36"
+          x2="19.78"
+          y2="19.78"
+        />
+        <line
+          x1="1"
+          y1="12"
+          x2="3"
+          y2="12"
+        />
+        <line
+          x1="21"
+          y1="12"
+          x2="23"
+          y2="12"
+        />
+        <line
+          x1="4.22"
+          y1="19.78"
+          x2="5.64"
+          y2="18.36"
+        />
+        <line
+          x1="18.36"
+          y1="5.64"
+          x2="19.78"
+          y2="4.22"
+        />
+      </svg>
+      <svg
+        v-else-if="themePreference === 'dark'"
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
       >
-        <option value="system">
-          System
-        </option>
-        <option value="light">
-          Light
-        </option>
-        <option value="dark">
-          Dark
-        </option>
-      </select>
-    </div>
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+      </svg>
+      <svg
+        v-else
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <rect
+          x="2"
+          y="3"
+          width="20"
+          height="14"
+          rx="2"
+          ry="2"
+        />
+        <line
+          x1="8"
+          y1="21"
+          x2="16"
+          y2="21"
+        />
+        <line
+          x1="12"
+          y1="17"
+          x2="12"
+          y2="21"
+        />
+      </svg>
+    </button>
 
     <button
       v-if="showLogout"
@@ -133,23 +238,21 @@ async function confirmLogout(): Promise<void> {
   padding: 0.75rem 1rem;
 }
 
-.theme-row {
+.theme-toggle {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.theme-control {
-  color: var(--color-text-muted);
-}
-
-select {
+  justify-content: center;
   font: inherit;
-  padding: 0.35rem 0.5rem;
+  padding: 0.35rem;
   border: 1px solid var(--color-border);
   border-radius: 0.35rem;
   background: var(--color-surface);
   color: var(--color-text);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  background: var(--color-surface-hover, var(--color-border));
 }
 
 .logout-button {
