@@ -1,3 +1,5 @@
+<img src="./assets/svws-gradehub-logo-slim.svg" alt="SVWS-GradeHub Logo" style="float:left; margin-right:12px; height:60px"> <br>
+
 # Dateien auswählen und Daten laden
 
 ## 1. ENM-Datei auswählen

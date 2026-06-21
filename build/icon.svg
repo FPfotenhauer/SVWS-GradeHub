@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A2E5A"/>
+      <stop offset="100%" stop-color="#2D5FA6"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F7B32B"/>
+      <stop offset="100%" stop-color="#F28F3B"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="256" height="256" rx="38" fill="url(#bg)"/>
+
+  <!-- Notebook body -->
+  <rect x="58" y="48" width="150" height="168" rx="10" fill="#E8EEF8"/>
+
+  <!-- Notebook spine -->
+  <rect x="58" y="48" width="22" height="168" rx="10" fill="#BFD0EE"/>
+
+  <!-- Binding rings -->
+  <circle cx="69" cy="90" r="8" fill="#2D5FA6" stroke="#E8EEF8" stroke-width="3"/>
+  <circle cx="69" cy="128" r="8" fill="#2D5FA6" stroke="#E8EEF8" stroke-width="3"/>
+  <circle cx="69" cy="166" r="8" fill="#2D5FA6" stroke="#E8EEF8" stroke-width="3"/>
+
+  <!-- Grade lines -->
+  <rect x="96" y="80" width="94" height="10" rx="5" fill="#BFD0EE"/>
+  <rect x="96" y="104" width="94" height="10" rx="5" fill="#BFD0EE"/>
+  <rect x="96" y="128" width="94" height="10" rx="5" fill="#BFD0EE"/>
+  <rect x="96" y="152" width="60" height="10" rx="5" fill="#BFD0EE"/>
+
+  <!-- Gold badge with grade "1" -->
+  <circle cx="175" cy="175" r="34" fill="url(#accent)"/>
+  <text x="175" y="185" text-anchor="middle" font-family="Georgia, serif" font-size="38" font-weight="bold" fill="#FFFFFF">1</text>
+</svg>

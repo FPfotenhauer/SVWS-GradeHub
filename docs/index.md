@@ -1,3 +1,5 @@
+<img src="./assets/svws-gradehub-logo-slim.svg" alt="SVWS-GradeHub Logo" style="float:left; margin-right:12px; height:60px"> <br>
+
 # Anwenderhandbuch für Lehrkräfte
 
 Dieses Handbuch erklärt die wichtigsten Schritte zur Nutzung von SVWS-GradeHub für die Notenverwaltung.

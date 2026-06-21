@@ -1,3 +1,5 @@
+<img src="./assets/svws-gradehub-logo-slim.svg" alt="SVWS-GradeHub Logo" style="float:left; margin-right:12px; height:60px"> <br>
+
 # Admin-Tutorial (Kurzfassung)
 
 Diese kurze Schritt-für-Schritt-Anleitung zeigt den typischen Ablauf im Adminbereich: vorbereiten, versenden und Rückläufe importieren.

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="100" viewBox="0 0 920 100" role="img" aria-labelledby="title desc">
+  <title id="title">SVWS-GradeHub (schmal)</title>
+  <desc id="desc">Kompakte Variante des Logos mit Notenbuch-Icon und einzeiligem Schriftzug</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1A2E5A"/>
+      <stop offset="100%" stop-color="#2D5FA6"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#F7B32B"/>
+      <stop offset="100%" stop-color="#F28F3B"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(0 10)">
+    <!-- Icon -->
+    <rect x="0" y="0" width="80" height="80" rx="12" fill="url(#bg)"/>
+    <!-- Notebook body -->
+    <rect x="18" y="15" width="47" height="52" rx="4" fill="#E8EEF8"/>
+    <!-- Notebook spine -->
+    <rect x="18" y="15" width="8" height="52" rx="4" fill="#BFD0EE"/>
+    <!-- Binding rings -->
+    <circle cx="22" cy="28" r="3" fill="#2D5FA6" stroke="#E8EEF8" stroke-width="1.5"/>
+    <circle cx="22" cy="40" r="3" fill="#2D5FA6" stroke="#E8EEF8" stroke-width="1.5"/>
+    <circle cx="22" cy="52" r="3" fill="#2D5FA6" stroke="#E8EEF8" stroke-width="1.5"/>
+    <!-- Grade lines -->
+    <rect x="30" y="24" width="28" height="4" rx="2" fill="#BFD0EE"/>
+    <rect x="30" y="33" width="28" height="4" rx="2" fill="#BFD0EE"/>
+    <rect x="30" y="42" width="28" height="4" rx="2" fill="#BFD0EE"/>
+    <rect x="30" y="51" width="18" height="4" rx="2" fill="#BFD0EE"/>
+    <!-- Gold badge -->
+    <circle cx="55" cy="55" r="12" fill="url(#accent)"/>
+    <text x="55" y="59" text-anchor="middle" font-family="Georgia, serif" font-size="13" font-weight="bold" fill="#FFFFFF">1</text>
+
+    <!-- Text -->
+    <g transform="translate(96 24)">
+      <text x="0" y="30" font-family="Segoe UI, Arial, sans-serif" font-size="32" font-weight="700" fill="#1A2E5A">SVWS-GradeHub</text>
+    </g>
+  </g>
+</svg>
