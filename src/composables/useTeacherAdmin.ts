@@ -327,6 +327,47 @@ export function useTeacherAdmin(authStore: AuthStore) {
     }
   }
 
+  async function erzeugeDateienUnverschluesseltFuerAuswahl(): Promise<void> {
+    errorMessage.value = ''
+    if (ausgewaehlt.value.size === 0) {
+      errorMessage.value = 'Bitte mindestens eine Lehrkraft auswählen.'
+      return
+    }
+    const ausgewaehlteLehrer = lehrer.value.filter((e) => ausgewaehlt.value.has(e.id))
+    isLoading.value = true
+    try {
+      const pickerWindow = window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }
+      let directoryHandle: FileSystemDirectoryHandle | null = null
+      if (typeof pickerWindow.showDirectoryPicker === 'function') {
+        try {
+          directoryHandle = await pickerWindow.showDirectoryPicker()
+        } catch {
+          return
+        }
+      }
+      for (const eintrag of ausgewaehlteLehrer) {
+        const enmJson = await ladeENMJsonFuerLehrer(eintrag.id)
+        const dateiname = `${eintrag.kuerzel || `lehrer-${eintrag.id}`}-enm.json`
+        if (directoryHandle) {
+          const fileHandle = await directoryHandle.getFileHandle(dateiname, { create: true })
+          const writable = await fileHandle.createWritable()
+          await writable.write(enmJson)
+          await writable.close()
+        } else {
+          const blob = new Blob([enmJson], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url; a.download = dateiname; a.click()
+          URL.revokeObjectURL(url)
+        }
+      }
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : 'Dateien konnten nicht erzeugt werden.'
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   function spaltenStil(key: SpaltenKey): { width: string; minWidth: string } {
     const breite = spaltenBreiten.value[key]
     if (key === 'passwort') return { width: 'auto', minWidth: `${breite}px` }
@@ -373,6 +414,7 @@ export function useTeacherAdmin(authStore: AuthStore) {
     kopiereNotenpasswort,
     druckePasswortStreifen,
     erzeugeDateienFuerAuswahl,
+    erzeugeDateienUnverschluesseltFuerAuswahl,
     spaltenStil,
     onResizeEnd,
     starteResize,

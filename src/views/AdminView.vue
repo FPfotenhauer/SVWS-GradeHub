@@ -73,13 +73,26 @@ const {
   kopiereNotenpasswort,
   druckePasswortStreifen,
   erzeugeDateienFuerAuswahl: _erzeugeDateienFuerAuswahl,
+  erzeugeDateienUnverschluesseltFuerAuswahl: _erzeugeDateienUnverschluesseltFuerAuswahl,
   spaltenStil,
   onResizeEnd,
   starteResize,
 } = useTeacherAdmin(authStore)
 
+const erzeugeModalOffen = ref(false)
+
 function erzeugeeDateien(): void {
+  erzeugeModalOffen.value = true
+}
+
+function erzeugeVerschluesselt(): void {
+  erzeugeModalOffen.value = false
   void _erzeugeDateienFuerAuswahl(oeffentlicherSchluesselPem.value)
+}
+
+function erzeugeUnverschluesselt(): void {
+  erzeugeModalOffen.value = false
+  void _erzeugeDateienUnverschluesseltFuerAuswahl()
 }
 
 const {
@@ -362,14 +375,6 @@ onUnmounted(() => {
           <h2>Lehrkräfte ({{ sichtbareLehrer.length }})</h2>
           <button
             class="btn-generate"
-            type="button"
-            :disabled="ausgewaehlt.size === 0"
-            @click="generierePasswoerterFuerAuswahl"
-          >
-            Passwörter generieren
-          </button>
-          <button
-            class="btn-generate"
             :class="{ 'btn-generate--aktiv': schluesselGeneriert }"
             type="button"
             @click="generiereSchluessel"
@@ -379,9 +384,33 @@ onUnmounted(() => {
           <button
             class="btn-generate"
             type="button"
+            :disabled="ausgewaehlt.size === 0"
+            @click="generierePasswoerterFuerAuswahl"
+          >
+            Passwörter generieren
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            :disabled="ausgewaehlt.size === 0"
+            @click="druckePasswortStreifen"
+          >
+            Drucken (Auswahl)
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            :disabled="ausgewaehlt.size === 0"
             @click="erzeugeeDateien"
           >
             Dateien erzeugen
+          </button>
+          <button
+            class="btn-generate"
+            type="button"
+            @click="oeffneImportModal"
+          >
+            Dateien importieren
           </button>
           <button
             v-if="läuftAufServer"
@@ -391,6 +420,14 @@ onUnmounted(() => {
             @click="versendeDateienFuerAuswahl"
           >
             Dateien versenden
+          </button>
+          <button
+            v-if="läuftAufServer"
+            class="btn-generate"
+            type="button"
+            @click="oeffneSmtpModal"
+          >
+            E-Mail-Server
           </button>
           <button
             class="btn-generate"
@@ -405,29 +442,6 @@ onUnmounted(() => {
             @click="laden"
           >
             Laden
-          </button>
-          <button
-            v-if="läuftAufServer"
-            class="btn-generate"
-            type="button"
-            @click="oeffneSmtpModal"
-          >
-            E-Mail-Server
-          </button>
-          <button
-            class="btn-generate"
-            type="button"
-            :disabled="ausgewaehlt.size === 0"
-            @click="druckePasswortStreifen"
-          >
-            Drucken (Auswahl)
-          </button>
-          <button
-            class="btn-generate"
-            type="button"
-            @click="oeffneImportModal"
-          >
-            Dateien importieren
           </button>
         </div>
         <div class="table-header-actions">
@@ -557,6 +571,67 @@ onUnmounted(() => {
         </table>
       </div>
     </section>
+
+    <!-- Erzeugen-Modal -->
+    <div
+      v-if="erzeugeModalOffen"
+      class="modal-backdrop"
+      @click.self="erzeugeModalOffen = false"
+    >
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="erzeugen-modal-title"
+      >
+        <div class="modal-header">
+          <h2 id="erzeugen-modal-title">
+            Dateien erzeugen
+          </h2>
+          <button
+            class="modal-close"
+            type="button"
+            aria-label="Schließen"
+            @click="erzeugeModalOffen = false"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-meta">
+            {{ ausgewaehlt.size }} Lehrkraft{{ ausgewaehlt.size !== 1 ? 'kräfte' : '' }} ausgewählt
+          </p>
+          <div class="erzeugen-optionen">
+            <button
+              class="btn-generate erzeugen-option"
+              type="button"
+              @click="erzeugeVerschluesselt"
+            >
+              <span class="erzeugen-option-titel">Verschlüsselte Dateien erzeugen</span>
+              <span class="erzeugen-option-anzahl">{{ ausgewaehlt.size }} Datei{{ ausgewaehlt.size !== 1 ? 'en' : '' }}</span>
+            </button>
+            <button
+              class="btn-generate erzeugen-option"
+              type="button"
+              @click="erzeugeUnverschluesselt"
+            >
+              <span class="erzeugen-option-titel">Unverschlüsselte Dateien erzeugen</span>
+              <span class="erzeugen-option-anzahl">{{ ausgewaehlt.size }} Datei{{ ausgewaehlt.size !== 1 ? 'en' : '' }}</span>
+              <span class="erzeugen-option-warnung">Nur für den Gebrauch in einem gesicherten Intranet!</span>
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            class="btn-generate"
+            type="button"
+            @click="erzeugeModalOffen = false"
+          >
+            Abbrechen
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Schlüssel-Modal -->
     <div
@@ -1984,5 +2059,37 @@ td.col-check input[type='checkbox'] {
   color: var(--color-error-text);
   background: color-mix(in srgb, var(--color-error-text) 10%, var(--color-surface));
   border: 1px solid color-mix(in srgb, var(--color-error-text) 30%, transparent);
+}
+
+.erzeugen-optionen {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.erzeugen-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.65rem 0.9rem;
+  width: 100%;
+  text-align: left;
+}
+
+.erzeugen-option-titel {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.erzeugen-option-anzahl {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.erzeugen-option-warnung {
+  font-size: 0.82rem;
+  color: var(--color-error-text);
+  font-weight: 600;
 }
 </style>
