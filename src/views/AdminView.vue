@@ -617,7 +617,7 @@ onUnmounted(() => {
             >
               <span class="erzeugen-option-titel">Unverschlüsselte Dateien erzeugen</span>
               <span class="erzeugen-option-anzahl">{{ ausgewaehlt.size }} Datei{{ ausgewaehlt.size !== 1 ? 'en' : '' }}</span>
-              <span class="erzeugen-option-warnung">Nur für den Gebrauch in einem gesicherten Intranet!</span>
+              <span class="erzeugen-option-warnung">Nur für den Gebrauch in einem gesicherten Intranet mit verschlüsselter Kommunikation!</span>
             </button>
           </div>
         </div>
