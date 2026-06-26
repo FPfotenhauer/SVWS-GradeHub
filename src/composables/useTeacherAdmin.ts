@@ -98,20 +98,28 @@ export function useTeacherAdmin(authStore: AuthStore) {
             },
           },
         )
-        if (!response.ok) return { id: eintrag.id, email: '' }
+        if (!response.ok) return { id: eintrag.id, email: '', istSichtbar: null }
         const data: unknown = await response.json()
-        if (!isRecord(data)) return { id: eintrag.id, email: '' }
-        return { id: eintrag.id, email: typeof data.emailDienstlich === 'string' ? data.emailDienstlich : '' }
+        if (!isRecord(data)) return { id: eintrag.id, email: '', istSichtbar: null }
+        return {
+          id: eintrag.id,
+          email: typeof data.emailDienstlich === 'string' ? data.emailDienstlich : '',
+          istSichtbar: typeof data.istSichtbar === 'boolean' ? data.istSichtbar : null,
+        }
       }),
     )
-    const emailMap = new Map<number, string>()
+    const stammdatenMap = new Map<number, { email: string; istSichtbar: boolean | null }>()
     for (const result of results) {
-      if (result.status === 'fulfilled') emailMap.set(result.value.id, result.value.email)
+      if (result.status === 'fulfilled') stammdatenMap.set(result.value.id, result.value)
     }
-    lehrer.value = lehrer.value.map((eintrag) => ({
-      ...eintrag,
-      emailDienstlich: emailMap.get(eintrag.id) ?? '',
-    }))
+    lehrer.value = lehrer.value.map((eintrag) => {
+      const stamm = stammdatenMap.get(eintrag.id)
+      return {
+        ...eintrag,
+        emailDienstlich: stamm?.email ?? '',
+        istAktiv: stamm?.istSichtbar ?? eintrag.istAktiv,
+      }
+    })
   }
 
   async function ladeLehrerListe(): Promise<void> {
